@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <!-- Logging -->
+    <logger>
+        <level>information</level>
+        <console>1</console>
+    </logger>
+
+    <!-- Network -->
+    <listen_host>0.0.0.0</listen_host>
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+
+    <!-- Memory limits for local dev -->
+    <max_memory_usage>1000000000</max_memory_usage>
+    <max_memory_usage_for_user>800000000</max_memory_usage_for_user>
+    <max_bytes_before_external_group_by>200000000</max_bytes_before_external_group_by>
+
+    <!-- Query settings -->
+    <max_query_size>1048576</max_query_size>
+    <max_ast_elements>50000</max_ast_elements>
+    <max_expanded_ast_elements>50000</max_expanded_ast_elements>
+
+    <!-- Timezone -->
+    <timezone>UTC</timezone>
+
+    <!-- Profiles -->
+    <profiles>
+        <default>
+            <max_execution_time>60</max_execution_time>
+            <max_rows_to_read>1000000000</max_rows_to_read>
+            <max_bytes_to_read>100000000000</max_bytes_to_read>
+        </default>
+    </profiles>
+
+    <!-- Users -->
+    <users>
+        <default>
+            <password>default</password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>default</profile>
+            <quota>default</quota>
+            <access_management>1</access_management>
+        </default>
+    </users>
+
+    <!-- Quotas -->
+    <quotas>
+        <default>
+            <interval>
+                <duration>3600</duration>
+                <queries>0</queries>
+                <errors>0</errors>
+                <result_rows>0</result_rows>
+                <read_rows>0</read_rows>
+                <execution_time>0</execution_time>
+            </interval>
+        </default>
+    </quotas>
+</clickhouse>
