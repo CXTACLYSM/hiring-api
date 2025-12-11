@@ -5,15 +5,13 @@ import (
 	"fmt"
 
 	"github.com/CXTACLYSM/hiring-api/configs/app"
-	"github.com/CXTACLYSM/hiring-api/configs/database/analytics/clickhouse"
 	"github.com/CXTACLYSM/hiring-api/configs/database/persistence/postgres"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	App        app.Config
-	Postgres   postgres.Config
-	ClickHouse clickhouse.Config
+	App      app.Config
+	Postgres postgres.Config
 }
 
 func Create() (*Config, error) {
@@ -39,13 +37,6 @@ func Create() (*Config, error) {
 			Password: viper.GetString("POSTGRES_PASSWORD"),
 			Database: viper.GetString("POSTGRES_DB"),
 		},
-		ClickHouse: clickhouse.Config{
-			Host:     viper.GetString("CLICKHOUSE_HOST"),
-			Port:     viper.GetInt("CLICKHOUSE_PORT"),
-			Username: viper.GetString("CLICKHOUSE_USERNAME"),
-			Password: viper.GetString("CLICKHOUSE_PASSWORD"),
-			Database: viper.GetString("CLICKHOUSE_DB"),
-		},
 	}
 
 	if err := config.Validate(); err != nil {
@@ -59,6 +50,5 @@ func (c *Config) Validate() error {
 	return errors.Join(
 		c.App.Validate(),
 		c.Postgres.Validate(),
-		c.ClickHouse.Validate(),
 	)
 }

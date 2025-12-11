@@ -1,27 +1,37 @@
+# =============================================================================
+# HIRING SERVICE - DOCKER COMPOSE
+# =============================================================================
+# Variables loaded from:
+#   .env.app   - application config (hosts, ports, credentials)
+#   .env.infra - infrastructure config (container names, external ports)
+# Run: make up
+# =============================================================================
+
 services:
+  # ===========================================================================
+  # APPLICATION SERVICES
+  # ===========================================================================
   api:
     build:
       context: .
       dockerfile: builds/Dockerfile
       target: api
-    container_name: weather_api
-    env_file: ".env"
+    container_name: hiring_api
+    env_file:
+      - .env.app
     ports:
-      - "8080:8080"
+      - "${APP_PORT}:8080"
     depends_on:
-      postgres:
+      postgres_primary:
         condition: service_healthy
-      clickhouse:
+      postgres_replica:
         condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
     networks:
-      - persistence-db
-      - analytic-db
-      - cache-db
-      - messaging
+      - backend
     restart: unless-stopped
 
   worker:
@@ -29,100 +39,133 @@ services:
       context: .
       dockerfile: builds/Dockerfile
       target: worker
-    container_name: weather_worker
-    env_file: ".env"
+    container_name: hiring_worker
+    env_file:
+      - .env.app
     depends_on:
-      postgres:
+      postgres_primary:
         condition: service_healthy
-      clickhouse:
+      postgres_replica:
         condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
     networks:
-      - persistence-db
-      - analytic-db
-      - cache-db
-      - messaging
+      - backend
     restart: unless-stopped
 
-  postgres:
+  # ===========================================================================
+  # POSTGRESQL PRIMARY (WRITE)
+  # ===========================================================================
+  postgres_primary:
     image: postgres:16-alpine
-    container_name: weather_postgres
+    container_name: ${POSTGRES_PRIMARY_CONTAINER_NAME}
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: weather_by_geo
+      # Superuser (for init scripts and administration)
+      POSTGRES_USER: ${POSTGRES_SUPERUSER}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_WRITE_DB}
+      # Application users (used in init.sh)
+      APP_WRITE_USER: ${POSTGRES_WRITE_USERNAME}
+      APP_WRITE_PASSWORD: ${POSTGRES_WRITE_PASSWORD}
+      APP_READ_USER: ${POSTGRES_READ_USERNAME}
+      APP_READ_PASSWORD: ${POSTGRES_READ_PASSWORD}
+      # Replication user
+      REPLICATOR_USER: ${POSTGRES_REPLICATOR_USERNAME}
+      REPLICATOR_PASSWORD: ${POSTGRES_REPLICATOR_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PRIMARY_EXTERNAL_PORT}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./builds/local/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
-      - ./builds/local/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
-      - ./scripts/init/postgres-init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./builds/local/postgres/primary/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./builds/local/postgres/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./scripts/init/postgres-primary-init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     command: postgres -c config_file=/etc/postgresql/postgresql.conf -c hba_file=/etc/postgresql/pg_hba.conf
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d weather_by_geo"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_WRITE_DB}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 10s
     networks:
-      - persistence-db
+      backend:
+        aliases:
+          - ${POSTGRES_WRITE_HOST}
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:24.8-alpine
-    container_name: weather_clickhouse
+  # ===========================================================================
+  # POSTGRESQL REPLICA (READ)
+  # ===========================================================================
+  postgres_replica:
+    image: postgres:16-alpine
+    container_name: ${POSTGRES_REPLICA_CONTAINER_NAME}
+    user: root
     environment:
-      CLICKHOUSE_DB: weather_by_geo
-      CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: default
+      PGUSER: ${POSTGRES_SUPERUSER}
+      PGPASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      PGDATABASE: ${POSTGRES_READ_DB}
+      REPLICATOR_USER: ${POSTGRES_REPLICATOR_USERNAME}
+      REPLICATOR_PASSWORD: ${POSTGRES_REPLICATOR_PASSWORD}
+      PRIMARY_HOST: postgres_primary
     ports:
-      - "9100:9000"
-      - "8125:8123"
+      - "${POSTGRES_REPLICA_EXTERNAL_PORT}:5432"
     volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - ./builds/local/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
-      - ./scripts/init/clickhouse-init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./builds/local/postgres/replica/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./builds/local/postgres/replica/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./scripts/init/postgres-replica-init.sh:/usr/local/bin/replica-init.sh:ro
+    command: ["/bin/bash", "/usr/local/bin/replica-init.sh"]
     healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER} && psql -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_READ_DB} -c 'SELECT pg_is_in_recovery()' | grep -q t"]
+      interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 15s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      postgres_primary:
+        condition: service_healthy
     networks:
-      - analytic-db
+      backend:
+        aliases:
+          - ${POSTGRES_READ_HOST}
 
+  # ===========================================================================
+  # REDIS
+  # ===========================================================================
   redis:
     image: redis:7.4-alpine
-    container_name: weather_redis
+    container_name: ${REDIS_CONTAINER_NAME}
     ports:
-      - "6379:6379"
+      - "${REDIS_EXTERNAL_PORT}:6379"
     volumes:
       - redis_data:/data
       - ./builds/local/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
-    command: redis-server /usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "redis", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
     networks:
-      - cache-db
+      backend:
+        aliases:
+          - ${REDIS_HOST}
 
+  # ===========================================================================
+  # RABBITMQ
+  # ===========================================================================
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    container_name: weather_rabbitmq
-    hostname: weather-rabbitmq
+    container_name: ${RABBITMQ_CONTAINER_NAME}
+    hostname: ${RABBITMQ_HOSTNAME}
     environment:
-      RABBITMQ_DEFAULT_USER: rabbitmq
-      RABBITMQ_DEFAULT_PASS: rabbitmq
-      RABBITMQ_DEFAULT_VHOST: weather
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${RABBITMQ_EXTERNAL_PORT}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
       - ./builds/local/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -133,20 +176,22 @@ services:
       retries: 5
       start_period: 20s
     networks:
-      - messaging
+      backend:
+        aliases:
+          - ${RABBITMQ_HOST}
 
+# =============================================================================
+# VOLUMES
+# =============================================================================
 volumes:
-  postgres_data:
-  clickhouse_data:
+  postgres_primary_data:
+  postgres_replica_data:
   redis_data:
   rabbitmq_data:
 
+# =============================================================================
+# NETWORKS
+# =============================================================================
 networks:
-  persistence-db:
-    driver: bridge
-  analytic-db:
-    driver: bridge
-  cache-db:
-    driver: bridge
-  messaging:
+  backend:
     driver: bridge
