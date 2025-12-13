@@ -1,26 +1,50 @@
 # =============================================================================
 # HIRING SERVICE - DOCKER COMPOSE
 # =============================================================================
-# Variables loaded from:
-#   .env.app   - application config (hosts, ports, credentials)
-#   .env.infra - infrastructure config (container names, external ports)
+# Variables loaded from .envs/ directory:
+#   infra/.env.infra                          - infrastructure config
+#   app/services/api/.env                     - api service env (generated)
+#   app/services/worker/.env                  - worker service env (generated)
+#   infra/services/postgres-primary/.env      - postgres primary env (generated)
+#   infra/services/postgres-replica/.env      - postgres replica env (generated)
+#   infra/services/redis/.env                 - redis env (generated)
+#   infra/services/rabbitmq/.env              - rabbitmq env (generated)
 # Run: make up
 # =============================================================================
 
 services:
   # ===========================================================================
-  # APPLICATION SERVICES
+  # API
   # ===========================================================================
   api:
-    build:
-      context: .
-      dockerfile: builds/Dockerfile
-      target: api
-    container_name: hiring_api
-    env_file:
-      - .env.app
+    # Image
+    image: ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/${COMPANY_HIRING_API_SERVICE_NAME}:${COMPANY_HIRING_VERSION}
+    # Network
+    container_name: ${COMPANY_HIRING_API_HOST}
+    hostname: ${COMPANY_HIRING_API_HOST}
     ports:
-      - "${APP_PORT}:8080"
+      - "8080:${COMPANY_HIRING_API_PORT}"
+    networks:
+      - backend
+    # Runtime
+    user: "1000:1000"
+    env_file:
+      - .envs/app/services/api/.env
+    # Deploy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    # entrypoint: ["/app/entrypoint.sh"]
+    command: ["./api"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       postgres_primary:
         condition: service_healthy
@@ -30,18 +54,38 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    networks:
-      - backend
     restart: unless-stopped
 
+  # ===========================================================================
+  # WORKER
+  # ===========================================================================
   worker:
-    build:
-      context: .
-      dockerfile: builds/Dockerfile
-      target: worker
-    container_name: hiring_worker
+    # Image
+    image: ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/${COMPANY_HIRING_WORKER_SERVICE_NAME}:${COMPANY_HIRING_VERSION}
+    # Network
+    container_name: ${COMPANY_HIRING_WORKER_HOST}
+    hostname: ${COMPANY_HIRING_WORKER_HOST}
+    networks:
+      - backend
+    # Runtime
+    user: "1000:1000"
     env_file:
-      - .env.app
+      - .envs/app/services/worker/.env
+    # Deploy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    # entrypoint: ["/app/entrypoint.sh"]
+    command: ["./worker"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "worker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       postgres_primary:
         condition: service_healthy
@@ -51,72 +95,92 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    networks:
-      - backend
     restart: unless-stopped
 
   # ===========================================================================
   # POSTGRESQL PRIMARY (WRITE)
   # ===========================================================================
   postgres_primary:
+    # Image
     image: postgres:16-alpine
-    container_name: ${POSTGRES_PRIMARY_CONTAINER_NAME}
-    environment:
-      # Superuser (for init scripts and administration)
-      POSTGRES_USER: ${POSTGRES_SUPERUSER}
-      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_WRITE_DB}
-      # Application users (used in init.sh)
-      APP_WRITE_USER: ${POSTGRES_WRITE_USERNAME}
-      APP_WRITE_PASSWORD: ${POSTGRES_WRITE_PASSWORD}
-      APP_READ_USER: ${POSTGRES_READ_USERNAME}
-      APP_READ_PASSWORD: ${POSTGRES_READ_PASSWORD}
-      # Replication user
-      REPLICATOR_USER: ${POSTGRES_REPLICATOR_USERNAME}
-      REPLICATOR_PASSWORD: ${POSTGRES_REPLICATOR_PASSWORD}
+    # Network
+    container_name: ${COMPANY_HIRING_POSTGRES_PRIMARY_HOST}
+    hostname: ${COMPANY_HIRING_POSTGRES_PRIMARY_HOST}
     ports:
-      - "${POSTGRES_PRIMARY_EXTERNAL_PORT}:5432"
+      - "5432:${COMPANY_HIRING_POSTGRES_PRIMARY_PORT}"
+    networks:
+      backend:
+        aliases:
+          - ${COMPANY_HIRING_POSTGRES_PRIMARY_HOST}
+    # Runtime
+    user: postgres
+    env_file:
+      - .envs/infra/services/postgres-primary/.env
     volumes:
       - postgres_primary_data:/var/lib/postgresql/data
       - ./builds/local/postgres/primary/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./builds/local/postgres/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
       - ./scripts/init/postgres-primary-init.sh:/docker-entrypoint-initdb.d/init.sh:ro
-    command: postgres -c config_file=/etc/postgresql/postgresql.conf -c hba_file=/etc/postgresql/pg_hba.conf
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Deploy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    # entrypoint: ["docker-entrypoint.sh"]
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_WRITE_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
-    networks:
-      backend:
-        aliases:
-          - ${POSTGRES_WRITE_HOST}
+    restart: unless-stopped
 
   # ===========================================================================
   # POSTGRESQL REPLICA (READ)
   # ===========================================================================
   postgres_replica:
+    # Image
     image: postgres:16-alpine
-    container_name: ${POSTGRES_REPLICA_CONTAINER_NAME}
-    user: root
-    environment:
-      PGUSER: ${POSTGRES_SUPERUSER}
-      PGPASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
-      PGDATABASE: ${POSTGRES_READ_DB}
-      REPLICATOR_USER: ${POSTGRES_REPLICATOR_USERNAME}
-      REPLICATOR_PASSWORD: ${POSTGRES_REPLICATOR_PASSWORD}
-      PRIMARY_HOST: postgres_primary
+    # Network
+    container_name: ${COMPANY_HIRING_POSTGRES_REPLICA_HOST}
+    hostname: ${COMPANY_HIRING_POSTGRES_REPLICA_HOST}
     ports:
-      - "${POSTGRES_REPLICA_EXTERNAL_PORT}:5432"
+      - "5433:${COMPANY_HIRING_POSTGRES_REPLICA_PORT}"
+    networks:
+      backend:
+        aliases:
+          - ${COMPANY_HIRING_POSTGRES_REPLICA_HOST}
+    # Runtime
+    user: root
+    env_file:
+      - .envs/infra/services/postgres-replica/.env
     volumes:
       - postgres_replica_data:/var/lib/postgresql/data
       - ./builds/local/postgres/replica/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./builds/local/postgres/replica/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
       - ./scripts/init/postgres-replica-init.sh:/usr/local/bin/replica-init.sh:ro
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Deploy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    # entrypoint: ["/bin/bash"]
     command: ["/bin/bash", "/usr/local/bin/replica-init.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER} && psql -U ${POSTGRES_SUPERUSER} -d ${POSTGRES_READ_DB} -c 'SELECT pg_is_in_recovery()' | grep -q t"]
+      test: ["CMD-SHELL", "pg_isready -U $$PGUSER && psql -U $$PGUSER -d $$PGDATABASE -c 'SELECT pg_is_in_recovery()' | grep -q t"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -124,61 +188,94 @@ services:
     depends_on:
       postgres_primary:
         condition: service_healthy
-    networks:
-      backend:
-        aliases:
-          - ${POSTGRES_READ_HOST}
+    restart: unless-stopped
 
   # ===========================================================================
   # REDIS
   # ===========================================================================
   redis:
+    # Image
     image: redis:7.4-alpine
-    container_name: ${REDIS_CONTAINER_NAME}
+    # Network
+    container_name: ${COMPANY_HIRING_REDIS_HOST}
+    hostname: ${COMPANY_HIRING_REDIS_HOST}
     ports:
-      - "${REDIS_EXTERNAL_PORT}:6379"
+      - "${COMPANY_HIRING_REDIS_PORT}:6379"
+    networks:
+      backend:
+        aliases:
+          - ${COMPANY_HIRING_REDIS_HOST}
+    # Runtime
+    user: redis
+    env_file:
+      - .envs/infra/services/redis/.env
     volumes:
       - redis_data:/data
       - ./builds/local/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
-    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Deploy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    # entrypoint: ["docker-entrypoint.sh"]
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "$$REDIS_PASSWORD", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
-    networks:
-      backend:
-        aliases:
-          - ${REDIS_HOST}
+    restart: unless-stopped
 
   # ===========================================================================
   # RABBITMQ
   # ===========================================================================
   rabbitmq:
+    # Image
     image: rabbitmq:3.13-management-alpine
-    container_name: ${RABBITMQ_CONTAINER_NAME}
-    hostname: ${RABBITMQ_HOSTNAME}
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
+    # Network
+    container_name: ${COMPANY_HIRING_RABBITMQ_HOST}
+    hostname: ${COMPANY_HIRING_RABBITMQ_HOST}
     ports:
-      - "${RABBITMQ_EXTERNAL_PORT}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+      - "${COMPANY_HIRING_RABBITMQ_PORT}:5672"
+      - "${COMPANY_HIRING_RABBITMQ_MANAGEMENT_PORT}:15672"
+    networks:
+      backend:
+        aliases:
+          - ${COMPANY_HIRING_RABBITMQ_HOST}
+    # Runtime
+    user: rabbitmq
+    env_file:
+      - .envs/infra/services/rabbitmq/.env
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
       - ./builds/local/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Deploy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    # entrypoint: ["docker-entrypoint.sh"]
+    command: ["rabbitmq-server"]
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 20s
-    networks:
-      backend:
-        aliases:
-          - ${RABBITMQ_HOST}
+    restart: unless-stopped
 
 # =============================================================================
 # VOLUMES

@@ -2,7 +2,6 @@ package configs
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/CXTACLYSM/hiring-api/configs/app"
 	"github.com/CXTACLYSM/hiring-api/configs/database/persistence/postgres"
@@ -10,32 +9,34 @@ import (
 )
 
 type Config struct {
-	App      app.Config
-	Postgres postgres.Config
+	App             *app.Config
+	PostgresCluster *postgres.ClusterConfig
 }
 
 func Create() (*Config, error) {
-	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
 
-	if err := viper.ReadInConfig(); err != nil {
-		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if !errors.As(err, &configFileNotFoundError) {
-			return nil, fmt.Errorf("configs reading error: %w", err)
-		}
-	}
-
 	config := &Config{
-		App: app.Config{
-			Host: viper.GetString("APP_HOST"),
-			Port: viper.GetString("APP_PORT"),
+		App: &app.Config{
+			Version: viper.GetString("APP_VERSION"),
+			Host:    viper.GetString("APP_HOST"),
+			Port:    viper.GetString("APP_PORT"),
 		},
-		Postgres: postgres.Config{
-			Host:     viper.GetString("POSTGRES_HOST"),
-			Port:     viper.GetInt("POSTGRES_PORT"),
-			Username: viper.GetString("POSTGRES_USERNAME"),
-			Password: viper.GetString("POSTGRES_PASSWORD"),
-			Database: viper.GetString("POSTGRES_DB"),
+		PostgresCluster: &postgres.ClusterConfig{
+			Read: &postgres.Config{
+				Host:     viper.GetString("POSTGRES_READ_HOST"),
+				Port:     viper.GetInt("POSTGRES_READ_PORT"),
+				Username: viper.GetString("POSTGRES_READ_USERNAME"),
+				Password: viper.GetString("POSTGRES_READ_PASSWORD"),
+				Database: viper.GetString("POSTGRES_READ_DATABASE"),
+			},
+			Write: &postgres.Config{
+				Host:     viper.GetString("POSTGRES_WRITE_HOST"),
+				Port:     viper.GetInt("POSTGRES_WRITE_PORT"),
+				Username: viper.GetString("POSTGRES_WRITE_USERNAME"),
+				Password: viper.GetString("POSTGRES_WRITE_PASSWORD"),
+				Database: viper.GetString("POSTGRES_WRITE_DATABASE"),
+			},
 		},
 	}
 
@@ -49,6 +50,6 @@ func Create() (*Config, error) {
 func (c *Config) Validate() error {
 	return errors.Join(
 		c.App.Validate(),
-		c.Postgres.Validate(),
+		c.PostgresCluster.Validate(),
 	)
 }

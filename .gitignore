@@ -1,2 +1,6 @@
 .idea
-.env
+
+.envs/.env
+.envs/app/services/*/.env
+.envs/infra/services/*/.env
+!.envs/infra/.env

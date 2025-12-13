@@ -10,7 +10,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o api ./cmd/api/main.go
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o worker ./cmd/worker/main.go
 
-FROM alpine:3.20 AS api
+FROM alpine:3.23 AS api
 
 RUN apk --no-cache add ca-certificates tzdata
 
@@ -22,7 +22,7 @@ EXPOSE 8080
 
 CMD ["./api"]
 
-FROM alpine:3.20 AS worker
+FROM alpine:3.23 AS worker
 
 RUN apk --no-cache add ca-certificates tzdata
 

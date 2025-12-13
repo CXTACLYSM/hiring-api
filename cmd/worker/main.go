@@ -13,7 +13,7 @@ func main() {
 		log.Fatalf("Failed to load configs: %v", err)
 	}
 
-	pgConn, err := postgres.NewConnector(cfg.Postgres)
+	pgConn, err := postgres.NewConnector(cfg.PostgresCluster)
 	if err != nil {
 		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
