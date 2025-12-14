@@ -6,29 +6,32 @@ import (
 	"net/http"
 
 	"github.com/CXTACLYSM/hiring-api/configs"
-	"github.com/CXTACLYSM/hiring-api/internal/handler"
-	pgConnector "github.com/CXTACLYSM/hiring-api/pkg/postgres"
+	"github.com/CXTACLYSM/hiring-api/internal/di"
+	"github.com/CXTACLYSM/hiring-api/internal/routing"
 )
 
 func main() {
 	cfg, err := configs.Create()
 	if err != nil {
-		log.Fatalf("Failed to load configs: %v", err)
+		log.Fatalf("Error creating config: %v", err)
 	}
 
-	pgConn, err := pgConnector.NewConnector(cfg.PostgresCluster)
+	container := di.NewContainer()
+	err = container.Init(cfg)
 	if err != nil {
-		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
+		log.Fatalf("Error initializing container: %s", err.Error())
 	}
-	defer pgConn.Close()
+	defer container.PgConnector.Close()
 
-	infoHandler := handler.NewInfoHandler(cfg)
-	registerHandler := handler.NewRegisterHandler(pgConn.WritePool)
-	authHandler := handler.NewAuthHandler(pgConn.WritePool)
+	router := routing.NewRouter()
+	err = router.Init(container.Handlers)
+	if err != nil {
+		log.Fatalf("Error initializing router: %s", err.Error())
+	}
 
-	http.Handle("/", infoHandler)
-	http.Handle("/api/register", registerHandler)
-	http.Handle("/api/login", authHandler)
+	for _, route := range router.GetRoutes() {
+		http.Handle(route.String(), route.Handler())
+	}
 
 	fmt.Printf("Starting http server on %s\n", cfg.App.SocketStr())
 	err = http.ListenAndServe(cfg.App.SocketStr(), nil)
