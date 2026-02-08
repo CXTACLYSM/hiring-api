@@ -12,7 +12,7 @@ echo "=== Initializing PostgreSQL PRIMARY ==="
 echo "Database: $POSTGRES_DB"
 echo "Write user: $APP_WRITE_USER"
 echo "Read user: $APP_READ_USER"
-echo "Replicator: $REPLICATOR_USER"
+echo "Replicator: $POSTGRES_REPLICATOR_USER"
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
 
@@ -54,18 +54,19 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     -- Grant permissions
     GRANT CONNECT ON DATABASE $POSTGRES_DB TO $APP_WRITE_USER, $APP_READ_USER;
     GRANT USAGE ON SCHEMA public TO $APP_WRITE_USER, $APP_READ_USER;
+    GRANT CREATE ON SCHEMA public TO $APP_WRITE_USER;
 
     -- Write user: all data operations
     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $APP_WRITE_USER;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    ALTER DEFAULT PRIVILEGES FOR ROLE $APP_WRITE_USER IN SCHEMA public
         GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO $APP_WRITE_USER;
     GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO $APP_WRITE_USER;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    ALTER DEFAULT PRIVILEGES FOR ROLE $APP_WRITE_USER IN SCHEMA public
         GRANT USAGE, SELECT ON SEQUENCES TO $APP_WRITE_USER;
 
     -- Read user: read only
     GRANT SELECT ON ALL TABLES IN SCHEMA public TO $APP_READ_USER;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    ALTER DEFAULT PRIVILEGES FOR ROLE $APP_WRITE_USER IN SCHEMA public
         GRANT SELECT ON TABLES TO $APP_READ_USER;
 
     -- =========================================================================
@@ -75,11 +76,11 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     -- REPLICATION is a separate attribute, not related to table permissions
     DO \$\$
     BEGIN
-        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$REPLICATOR_USER') THEN
-            CREATE ROLE $REPLICATOR_USER WITH REPLICATION LOGIN PASSWORD '$REPLICATOR_PASSWORD';
-            RAISE NOTICE 'Created replication user: $REPLICATOR_USER';
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$POSTGRES_REPLICATOR_USER') THEN
+            CREATE ROLE $POSTGRES_REPLICATOR_USER WITH REPLICATION LOGIN PASSWORD '$POSTGRES_REPLICATOR_PASSWORD';
+            RAISE NOTICE 'Created replication user: $POSTGRES_REPLICATOR_USER';
         ELSE
-            RAISE NOTICE 'Replication user already exists: $REPLICATOR_USER';
+            RAISE NOTICE 'Replication user already exists: $POSTGRES_REPLICATOR_USER';
         END IF;
     END
     \$\$;
@@ -107,7 +108,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     \echo '=== Created users ==='
     SELECT rolname, rolcanlogin, rolreplication
     FROM pg_roles
-    WHERE rolname IN ('$APP_WRITE_USER', '$APP_READ_USER', '$REPLICATOR_USER');
+    WHERE rolname IN ('$APP_WRITE_USER', '$APP_READ_USER', '$POSTGRES_REPLICATOR_USER');
 
     \echo ''
     \echo '=== Replication slots ==='

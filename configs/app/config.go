@@ -6,9 +6,10 @@ import (
 )
 
 type Config struct {
-	Version string
-	Host    string
-	Port    string
+	Version   string
+	Host      string
+	Port      string
+	JwtSecret string
 }
 
 func (c *Config) Validate() error {
@@ -22,6 +23,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Host == "" {
 		errorList = append(errorList, fmt.Errorf("port can't be empty"))
+	}
+	if c.JwtSecret == "" {
+		errorList = append(errorList, fmt.Errorf("jwt secret can't be empty"))
 	}
 
 	return errors.Join(errorList...)

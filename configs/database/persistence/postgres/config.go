@@ -28,12 +28,12 @@ func (c *ClusterConfig) DSN(operation uint8) (string, error) {
 	case WriteOperation:
 		return fmt.Sprintf(
 			"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-			c.Read.Host, c.Read.Port, c.Read.Username, c.Read.Password, c.Read.Database,
+			c.Write.Host, c.Write.Port, c.Write.Username, c.Write.Password, c.Write.Database,
 		), nil
 	case ReadOperation:
 		return fmt.Sprintf(
 			"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-			c.Write.Host, c.Write.Port, c.Write.Username, c.Write.Password, c.Write.Database,
+			c.Read.Host, c.Read.Port, c.Read.Username, c.Read.Password, c.Read.Database,
 		), nil
 	default:
 		return "", errors.New("invalid pool type")

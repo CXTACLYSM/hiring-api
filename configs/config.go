@@ -18,9 +18,10 @@ func Create() (*Config, error) {
 
 	config := &Config{
 		App: &app.Config{
-			Version: viper.GetString("APP_VERSION"),
-			Host:    viper.GetString("APP_HOST"),
-			Port:    viper.GetString("APP_PORT"),
+			Version:   viper.GetString("APP_VERSION"),
+			Host:      viper.GetString("APP_HOST"),
+			Port:      viper.GetString("APP_PORT"),
+			JwtSecret: viper.GetString("JWT_SECRET"),
 		},
 		PostgresCluster: &postgres.ClusterConfig{
 			Read: &postgres.Config{

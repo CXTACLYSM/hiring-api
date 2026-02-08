@@ -59,43 +59,43 @@ services:
   # ===========================================================================
   # WORKER
   # ===========================================================================
-  worker:
-    # Image
-    image: ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/${COMPANY_HIRING_WORKER_SERVICE_NAME}:${COMPANY_HIRING_VERSION}
-    # Network
-    container_name: ${COMPANY_HIRING_WORKER_HOST}
-    hostname: ${COMPANY_HIRING_WORKER_HOST}
-    networks:
-      - backend
-    # Runtime
-    user: "1000:1000"
-    env_file:
-      - .envs/app/services/worker/.env
-    # Deploy
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
-    # entrypoint: ["/app/entrypoint.sh"]
-    command: ["./worker"]
-    healthcheck:
-      test: ["CMD", "pgrep", "-x", "worker"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    depends_on:
-      postgres_primary:
-        condition: service_healthy
-      postgres_replica:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    restart: unless-stopped
+#  worker:
+#    # Image
+#    image: ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/${COMPANY_HIRING_WORKER_SERVICE_NAME}:${COMPANY_HIRING_VERSION}
+#    # Network
+#    container_name: ${COMPANY_HIRING_WORKER_HOST}
+#    hostname: ${COMPANY_HIRING_WORKER_HOST}
+#    networks:
+#      - backend
+#    # Runtime
+#    user: "1000:1000"
+#    env_file:
+#      - .envs/app/services/worker/.env
+#    # Deploy
+#    deploy:
+#      resources:
+#        limits:
+#          memory: 512M
+#        reservations:
+#          memory: 256M
+#    # entrypoint: ["/app/entrypoint.sh"]
+#    command: ["./worker"]
+#    healthcheck:
+#      test: ["CMD", "pgrep", "-x", "worker"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+#      start_period: 10s
+#    depends_on:
+#      postgres_primary:
+#        condition: service_healthy
+#      postgres_replica:
+#        condition: service_healthy
+#      redis:
+#        condition: service_healthy
+#      rabbitmq:
+#        condition: service_healthy
+#    restart: unless-stopped
 
   # ===========================================================================
   # POSTGRESQL PRIMARY (WRITE)
@@ -132,7 +132,7 @@ services:
           memory: 1G
         reservations:
           memory: 512M
-    # entrypoint: ["docker-entrypoint.sh"]
+#    entrypoint: ["docker-entrypoint.sh"]
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
@@ -291,4 +291,5 @@ volumes:
 # =============================================================================
 networks:
   backend:
+    name: ${PG_NETWORK}
     driver: bridge

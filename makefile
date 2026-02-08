@@ -355,6 +355,7 @@ PG_MIGRATIONS_PATH := migrations/postgres
 PG_NETWORK := hiring_backend
 PG_DSN := postgres://$(COMPANY_HIRING_POSTGRES_PRIMARY_USERNAME):$(COMPANY_HIRING_POSTGRES_PRIMARY_PASSWORD)@$(COMPANY_HIRING_POSTGRES_PRIMARY_HOST):5432/$(COMPANY_HIRING_POSTGRES_DATABASE)?sslmode=disable
 
+path ?= .
 .PHONY: migrate-up
 migrate-up: ## Run all pending migrations
 	@echo "$(GREEN)Running migrations on PRIMARY...$(NC)"
@@ -362,7 +363,7 @@ migrate-up: ## Run all pending migrations
 		-v $(PWD)/$(PG_MIGRATIONS_PATH):/migrations \
 		--network $(PG_NETWORK) \
 		migrate/migrate:latest \
-		-path=/migrations \
+		-path=/migrations/$(path) \
 		-database "$(PG_DSN)" \
 		up
 	@echo "$(GREEN)Migrations completed!$(NC)"
@@ -399,7 +400,7 @@ migrate-create: ## Create new migration (usage: make migrate-create name=create_
 	docker run --rm \
 		-v $(PWD)/$(PG_MIGRATIONS_PATH):/migrations \
 		migrate/migrate:latest \
-		create -ext sql -dir /migrations -seq $(name)
+		create -ext sql -dir /migrations/$(path) -seq $(name)
 	@echo "$(GREEN)Migration created!$(NC)"
 
 # =============================================================================

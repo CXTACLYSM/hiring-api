@@ -7,8 +7,8 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o api ./cmd/api/main.go
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o worker ./cmd/worker/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o api ./cmd/auth/main.go
+#RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o worker ./cmd/worker/main.go
 
 FROM alpine:3.23 AS api
 
@@ -22,12 +22,12 @@ EXPOSE 8080
 
 CMD ["./api"]
 
-FROM alpine:3.23 AS worker
-
-RUN apk --no-cache add ca-certificates tzdata
-
-WORKDIR /app
-
-COPY --from=builder /app/worker .
-
-CMD ["./worker"]
+#FROM alpine:3.23 AS worker
+#
+#RUN apk --no-cache add ca-certificates tzdata
+#
+#WORKDIR /app
+#
+#COPY --from=builder /app/worker .
+#
+#CMD ["./worker"]
