@@ -11,7 +11,7 @@ type UserService struct {
 	createOneUser *createOne.Handler
 }
 
-func NewUserService(findOne *findOne.Handler, createOne *createOne.Handler, tokenGenerator TokenGenerator) *UserService {
+func NewUserService(findOne *findOne.Handler, createOne *createOne.Handler) *UserService {
 	return &UserService{
 		findOneUser:   findOne,
 		createOneUser: createOne,

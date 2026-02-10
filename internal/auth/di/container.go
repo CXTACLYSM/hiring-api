@@ -24,6 +24,7 @@ type Queries struct {
 
 type Services struct {
 	authService *services.AuthService
+	userService *services.UserService
 }
 
 type Handlers struct {
@@ -108,14 +109,18 @@ func (c *Container) initServices(cfg *configs.Config) error {
 
 	c.Services = &Services{
 		authService: services.NewAuthService(c.Queries.findOneUser, c.Queries.createOneUser, tokenGenerator),
+		userService: services.NewUserService(c.Queries.findOneUser, c.Queries.createOneUser),
 	}
 
 	return nil
 }
 
 func (c *Container) initHandlers() error {
-	c.Handlers.Register = handlers.NewRegisterHandler(c.Services.authService)
-	c.Handlers.Login = handlers.NewLoginHandler(c.Services.authService)
+	c.Handlers = &Handlers{
+		Register: handlers.NewRegisterHandler(c.Services.authService),
+		Login:    handlers.NewLoginHandler(c.Services.authService),
+		Me:       handlers.NewMeHandler(c.Services.userService),
+	}
 
 	return nil
 }

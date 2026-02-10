@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/CXTACLYSM/hiring-api/internal/auth/shared/infrastructure/httputils"
@@ -19,6 +20,10 @@ func NewMeHandler(userService *services.UserService) *MeHandler {
 
 func (h *MeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	claims := httputils.ClaimsFromRequest(r)
+	if claims == nil {
+		httputils.WriteError(w, errors.New("claims is nil"))
+		return
+	}
 
 	user, err := h.userService.Me(claims.UserId)
 	if err != nil {
