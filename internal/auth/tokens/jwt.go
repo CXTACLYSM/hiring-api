@@ -3,7 +3,7 @@ package tokens
 import (
 	"time"
 
-	"github.com/CXTACLYSM/hiring-api/internal/auth/domain/entities"
+	"github.com/CXTACLYSM/hiring-api/internal/auth/user/domain/entities"
 	"github.com/golang-jwt/jwt/v5"
 )
 

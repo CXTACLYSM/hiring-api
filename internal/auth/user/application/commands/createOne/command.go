@@ -6,13 +6,13 @@ import (
 	"log"
 	"time"
 
-	"github.com/CXTACLYSM/hiring-api/internal/auth/domain/entities"
-	"github.com/CXTACLYSM/hiring-api/internal/auth/domain/enums"
+	"github.com/CXTACLYSM/hiring-api/internal/auth/user/domain/entities"
+	"github.com/CXTACLYSM/hiring-api/internal/auth/user/domain/enums"
 	"github.com/CXTACLYSM/hiring-api/pkg/postgres"
 	"github.com/google/uuid"
 )
 
-type Query struct {
+type Command struct {
 	Username     string
 	Email        string
 	PasswordHash string
@@ -28,13 +28,13 @@ func NewCreateOneUserQueryHandler(connector *postgres.Connector) *Handler {
 	}
 }
 
-func (h *Handler) Handle(query Query) (*entities.User, error) {
+func (h *Handler) Handle(command Command) (*entities.User, error) {
 	now := time.Now()
 	user := &entities.User{
 		Id:           uuid.NewString(),
-		Username:     query.Username,
-		Email:        query.Email,
-		PasswordHash: query.PasswordHash,
+		Username:     command.Username,
+		Email:        command.Email,
+		PasswordHash: command.PasswordHash,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		DeletedAt:    nil,
@@ -47,7 +47,7 @@ func (h *Handler) Handle(query Query) (*entities.User, error) {
 		user.Id,
 		user.Username,
 		user.Email,
-		query.PasswordHash,
+		command.PasswordHash,
 		user.CreatedAt,
 		user.UpdatedAt,
 		nil,

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/CXTACLYSM/hiring-api/internal/auth/domain/entities"
+	"github.com/CXTACLYSM/hiring-api/internal/auth/user/domain/entities"
 	"github.com/CXTACLYSM/hiring-api/pkg/postgres"
 	"github.com/jackc/pgx/v5"
 )

@@ -3,10 +3,10 @@ package services
 import (
 	"net/http"
 
-	"github.com/CXTACLYSM/hiring-api/internal/auth/dto"
-	appErrors "github.com/CXTACLYSM/hiring-api/internal/auth/errors"
-	"github.com/CXTACLYSM/hiring-api/internal/auth/queries/user/createOne"
-	"github.com/CXTACLYSM/hiring-api/internal/auth/queries/user/findOne"
+	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/commands/createOne"
+	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/dto"
+	appErrors "github.com/CXTACLYSM/hiring-api/internal/auth/user/application/errors"
+	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/queries/findOne"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -73,7 +73,7 @@ func (s *AuthService) Register(dto *dto.RegisterDTO) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	user, err = s.createOneUser.Handle(createOne.Query{
+	user, err = s.createOneUser.Handle(createOne.Command{
 		Username:     dto.Username,
 		Email:        dto.Email,
 		PasswordHash: string(passwordHash),

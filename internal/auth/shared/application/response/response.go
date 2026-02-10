@@ -1,4 +1,4 @@
-package dto
+package response
 
 type SuccessResponse struct {
 	Ok   bool `json:"ok"`
