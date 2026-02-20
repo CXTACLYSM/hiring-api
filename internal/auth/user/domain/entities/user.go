@@ -1,14 +1,26 @@
 package entities
 
-import "time"
+import (
+	"time"
 
-type User struct {
-	Id           string `json:"id"`
-	Username     string `json:"username"`
-	Email        string `json:"email"`
-	PasswordHash string `json:"password_hash"`
+	entities "github.com/CXTACLYSM/hiring-api/pkg/shared/domain"
+	"github.com/google/uuid"
+)
 
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
+type User entities.User
+
+func NewUser(username, email, passwordHash string) *User {
+	now := time.Now()
+	return &User{
+		Id:           uuid.NewString(),
+		Username:     username,
+		Email:        email,
+		PasswordHash: passwordHash,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+}
+
+func (u *User) ToShared() *entities.User {
+	return (*entities.User)(u)
 }

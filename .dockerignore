@@ -1,0 +1,9 @@
+.envs/
+.git/
+bin/
+builds/local/
+migrations/
+scripts/
+*.md
+Makefile
+compose.yml

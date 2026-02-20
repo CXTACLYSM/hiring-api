@@ -6,8 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/CXTACLYSM/hiring-api/configs/database/persistence/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+const (
+	WriteOperation = 1
+	ReadOperation  = 2
 )
 
 type Connector struct {
@@ -15,20 +19,12 @@ type Connector struct {
 	WritePool *pgxpool.Pool
 }
 
-func NewConnector(cfg *postgres.ClusterConfig) (*Connector, error) {
-	readDSN, err := cfg.DSN(postgres.ReadOperation)
-	if err != nil {
-		return nil, err
-	}
+func NewConnector(readDSN, writeDSN string) (*Connector, error) {
 	readPool, err := getPool(readDSN)
 	if err != nil {
 		return nil, err
 	}
 
-	writeDSN, err := cfg.DSN(postgres.WriteOperation)
-	if err != nil {
-		return nil, err
-	}
 	writePool, err := getPool(writeDSN)
 	if err != nil {
 		return nil, err
@@ -63,7 +59,7 @@ func getPool(dsn string) (*pgxpool.Pool, error) {
 		pool.Close()
 		return nil, fmt.Errorf("cannot connect to PostgreSQL: %w", err)
 	}
-	fmt.Printf("successfully connected to PostgreSQL at %s", dsn)
+	fmt.Printf("successfully connected to PostgreSQL at %s\n", dsn)
 
 	return pool, nil
 }
@@ -73,15 +69,15 @@ func (c *Connector) Close() {
 	c.WritePool.Close()
 }
 
-func (c *Connector) PingByOperation(operation uint8, ctx context.Context) error {
+func (c *Connector) PingByOperation(ctx context.Context, operation uint8) error {
 	switch true {
-	case operation == postgres.ReadOperation && c.ReadPool != nil:
+	case operation == ReadOperation && c.ReadPool != nil:
 		err := c.ReadPool.Ping(ctx)
 		if err != nil {
 			return err
 		}
 		return nil
-	case operation == postgres.WriteOperation && c.WritePool != nil:
+	case operation == WriteOperation && c.WritePool != nil:
 		err := c.WritePool.Ping(ctx)
 		if err != nil {
 			return err

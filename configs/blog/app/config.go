@@ -1,0 +1,42 @@
+package app
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+type Config struct {
+	Version string
+	Host    string
+	Http    Http
+}
+
+type Http struct {
+	Port              int
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	MaxHeaderBytes    int
+}
+
+func (c *Config) Validate() error {
+	var errorList []error
+
+	if c.Version == "" {
+		errorList = append(errorList, fmt.Errorf("version can't be empty"))
+	}
+	if c.Host == "" {
+		errorList = append(errorList, fmt.Errorf("host can't be empty"))
+	}
+	if c.Http.Port == 0 {
+		errorList = append(errorList, fmt.Errorf("http port can't be zero value"))
+	}
+
+	return errors.Join(errorList...)
+}
+
+func (c *Config) HttpSocketStr() string {
+	return fmt.Sprintf("%s:%d", c.Host, c.Http.Port)
+}

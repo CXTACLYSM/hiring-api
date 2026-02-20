@@ -3,9 +3,10 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/CXTACLYSM/hiring-api/internal/auth/shared/infrastructure/httputils"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/dto"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/services"
+	"github.com/CXTACLYSM/hiring-api/internal/auth/user/infrastructure/responses"
+	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/httputils"
 )
 
 type RegisterHandler struct {
@@ -31,5 +32,5 @@ func (h *RegisterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputils.ResponseSuccess(w, http.StatusCreated, map[string]string{"token": token})
+	httputils.ResponseOk(w, http.StatusCreated, responses.NewRegisterResponse(token))
 }

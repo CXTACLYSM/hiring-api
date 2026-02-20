@@ -1,15 +1,22 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"errors"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/CXTACLYSM/hiring-api/configs"
+	"github.com/CXTACLYSM/hiring-api/configs/auth"
+	"github.com/CXTACLYSM/hiring-api/internal/auth"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/di"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	authgrpc "github.com/CXTACLYSM/hiring-api/internal/auth/grpc"
+	pb "github.com/CXTACLYSM/hiring-api/pkg/grpc/auth/v1"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -18,36 +25,58 @@ func main() {
 		log.Fatalf("Error creating config: %v", err)
 	}
 
-	container := di.NewContainer()
+	container := &di.Container{}
 	err = container.Init(cfg)
 	if err != nil {
 		log.Fatalf("Error initializing container: %s", err.Error())
 	}
 	defer container.Infrastructure.PgConnector.Close()
 
-	r := chi.NewRouter()
-
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(30 * time.Second))
-	r.Use(middleware.Heartbeat("/ping"))
-	r.Use(container.Middlewares.Json.ContentType)
-
-	r.Route("/api/v1", func(r chi.Router) {
-		r.Post("/register", container.Handlers.Register.ServeHTTP)
-		r.Post("/login", container.Handlers.Login.ServeHTTP)
-
-		r.Group(func(r chi.Router) {
-			r.Use(container.Middlewares.Authenticate.Authenticate)
-			r.Get("/me", container.Handlers.Me.ServeHTTP)
-		})
-	})
-
-	fmt.Printf("Starting http server on %s\n", cfg.App.SocketStr())
-	err = http.ListenAndServe(cfg.App.SocketStr(), r)
-	if err != nil {
-		log.Fatalf("error creating http server: %v", err)
+	r := auth.InitRouter(container.Middlewares, container.Handlers)
+	srv := &http.Server{
+		Addr:              cfg.App.HttpSocketStr(),
+		Handler:           r,
+		ReadHeaderTimeout: cfg.App.Http.ReadHeaderTimeout,
+		ReadTimeout:       cfg.App.Http.ReadTimeout,
+		WriteTimeout:      cfg.App.Http.WriteTimeout,
+		IdleTimeout:       cfg.App.Http.IdleTimeout,
+		MaxHeaderBytes:    cfg.App.Http.MaxHeaderBytes,
 	}
+	grpcServer := grpc.NewServer()
+	authServer := authgrpc.NewAuthServer(
+		[]byte(cfg.App.JwtSecret),
+		container.Queries.FindOneUser,
+	)
+	pb.RegisterAuthServiceServer(grpcServer, authServer)
+
+	go func() {
+		log.Printf("Starting http server on %s", cfg.App.HttpSocketStr())
+		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("error starting http server: %v", err)
+		}
+	}()
+	go func() {
+		lis, err := net.Listen("tcp", cfg.App.GrpcSocketStr())
+		if err != nil {
+			log.Fatalf("failed to listen grpc: %v", err)
+		}
+		log.Printf("Starting gRPC server on :50051")
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to serve grpc: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	grpcServer.GracefulStop()
+
+	log.Println("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err = srv.Shutdown(ctx); err != nil {
+		log.Fatalf("server forced to shutdown: %v", err)
+	}
+	log.Println("Server stopped")
 }

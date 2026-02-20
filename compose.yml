@@ -3,33 +3,37 @@
 # =============================================================================
 # Variables loaded from .envs/ directory:
 #   infra/.env.infra                          - infrastructure config
-#   app/services/api/.env                     - api service env (generated)
-#   app/services/worker/.env                  - worker service env (generated)
-#   infra/services/postgres-primary/.env      - postgres primary env (generated)
-#   infra/services/postgres-replica/.env      - postgres replica env (generated)
-#   infra/services/redis/.env                 - redis env (generated)
-#   infra/services/rabbitmq/.env              - rabbitmq env (generated)
+#   app/services/auth/.env                    - auth service env
+#   app/services/blog/.env                    - blog service env
+#   app/services/notifications/.env           - notifications service env
+#   infra/services/postgres-primary/.env      - postgres primary env
+#   infra/services/postgres-replica/.env      - postgres replica env
+#   infra/services/redis/.env                 - redis env
 # Run: make up
 # =============================================================================
 
 services:
   # ===========================================================================
-  # API
+  # AUTH
   # ===========================================================================
-  api:
+  # Auth microservice: JWT authentication, user management
+  # Exposes REST API (8080) and gRPC (50051) for inter-service communication
+  # Other services call gRPC ValidateToken to authenticate requests
+  auth:
     # Image
-    image: ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/${COMPANY_HIRING_API_SERVICE_NAME}:${COMPANY_HIRING_VERSION}
+    image: ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/auth:${COMPANY_HIRING_VERSION}
     # Network
-    container_name: ${COMPANY_HIRING_API_HOST}
-    hostname: ${COMPANY_HIRING_API_HOST}
+    container_name: ${COMPANY_HIRING_AUTH_HOST}
+    hostname: ${COMPANY_HIRING_AUTH_HOST}
     ports:
-      - "8080:${COMPANY_HIRING_API_PORT}"
+      - "8080:8080"
+      - "50051:50051"
     networks:
       - backend
     # Runtime
     user: "1000:1000"
     env_file:
-      - .envs/app/services/api/.env
+      - .envs/app/services/auth/.env
     # Deploy
     deploy:
       resources:
@@ -37,10 +41,9 @@ services:
           memory: 512M
         reservations:
           memory: 256M
-    # entrypoint: ["/app/entrypoint.sh"]
-    command: ["./api"]
+    command: ["./auth"]
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]
+      test: ["CMD", "wget", "--spider", "-q", "http://auth.hiring.company:8080/ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -52,54 +55,102 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rabbitmq:
+    restart: unless-stopped
+
+  # ===========================================================================
+  # BLOG
+  # ===========================================================================
+  # Blog microservice: CRUD for posts
+  # Authenticates via gRPC call to auth service
+  # Publishes events to Kafka (e.g. post.created, post.updated)
+  blog:
+    # Image
+    image: ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/blog:${COMPANY_HIRING_VERSION}
+    # Network
+    container_name: ${COMPANY_HIRING_BLOG_HOST}
+    hostname: ${COMPANY_HIRING_BLOG_HOST}
+    ports:
+      - "8081:8081"
+    networks:
+      - backend
+    # Runtime
+    user: "1000:1000"
+    env_file:
+      - .envs/app/services/blog/.env
+    # Deploy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    command: ["./blog"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      auth:
+        condition: service_healthy
+      postgres_primary:
+        condition: service_healthy
+      postgres_replica:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     restart: unless-stopped
 
   # ===========================================================================
-  # WORKER
+  # NOTIFICATIONS
   # ===========================================================================
-#  worker:
-#    # Image
-#    image: ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/${COMPANY_HIRING_WORKER_SERVICE_NAME}:${COMPANY_HIRING_VERSION}
-#    # Network
-#    container_name: ${COMPANY_HIRING_WORKER_HOST}
-#    hostname: ${COMPANY_HIRING_WORKER_HOST}
-#    networks:
-#      - backend
-#    # Runtime
-#    user: "1000:1000"
-#    env_file:
-#      - .envs/app/services/worker/.env
-#    # Deploy
-#    deploy:
-#      resources:
-#        limits:
-#          memory: 512M
-#        reservations:
-#          memory: 256M
-#    # entrypoint: ["/app/entrypoint.sh"]
-#    command: ["./worker"]
-#    healthcheck:
-#      test: ["CMD", "pgrep", "-x", "worker"]
-#      interval: 10s
-#      timeout: 5s
-#      retries: 5
-#      start_period: 10s
-#    depends_on:
-#      postgres_primary:
-#        condition: service_healthy
-#      postgres_replica:
-#        condition: service_healthy
-#      redis:
-#        condition: service_healthy
-#      rabbitmq:
-#        condition: service_healthy
-#    restart: unless-stopped
+  # Notifications microservice: consumes Kafka events, sends notifications
+  # Listens to topics like post.created, post.updated
+  # Does not expose HTTP API (worker-style service)
+  notifications:
+    # Image
+    image: ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/notifications:${COMPANY_HIRING_VERSION}
+    # Network
+    container_name: ${COMPANY_HIRING_NOTIFICATIONS_HOST}
+    hostname: ${COMPANY_HIRING_NOTIFICATIONS_HOST}
+    ports:
+      - "8082:8082"
+    networks:
+      - backend
+    # Runtime
+    user: "1000:1000"
+    env_file:
+      - .envs/app/services/notifications/.env
+    # Deploy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    command: ["./notifications"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      auth:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
 
   # ===========================================================================
   # POSTGRESQL PRIMARY (WRITE)
   # ===========================================================================
+  # Primary PostgreSQL instance for write operations
+  # Physical streaming replication to replica via WAL
+  # Init script creates databases, users, replication slots, grants
   postgres_primary:
     # Image
     image: postgres:16-alpine
@@ -132,7 +183,6 @@ services:
           memory: 1G
         reservations:
           memory: 512M
-#    entrypoint: ["docker-entrypoint.sh"]
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
@@ -145,6 +195,8 @@ services:
   # ===========================================================================
   # POSTGRESQL REPLICA (READ)
   # ===========================================================================
+  # Read-only replica for SELECT queries (CQRS read side)
+  # Streams WAL from primary, always in recovery mode
   postgres_replica:
     # Image
     image: postgres:16-alpine
@@ -177,7 +229,6 @@ services:
           memory: 1G
         reservations:
           memory: 512M
-    # entrypoint: ["/bin/bash"]
     command: ["/bin/bash", "/usr/local/bin/replica-init.sh"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$PGUSER && psql -U $$PGUSER -d $$PGDATABASE -c 'SELECT pg_is_in_recovery()' | grep -q t"]
@@ -193,6 +244,8 @@ services:
   # ===========================================================================
   # REDIS
   # ===========================================================================
+  # In-memory cache and session store
+  # Used for: token blacklist, rate limiting, caching
   redis:
     # Image
     image: redis:7.4-alpine
@@ -223,7 +276,6 @@ services:
           memory: 256M
         reservations:
           memory: 128M
-    # entrypoint: ["docker-entrypoint.sh"]
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "$$REDIS_PASSWORD", "ping"]
@@ -234,32 +286,81 @@ services:
     restart: unless-stopped
 
   # ===========================================================================
-  # RABBITMQ
+  # KAFKA (KRaft mode, no Zookeeper)
   # ===========================================================================
-  rabbitmq:
-    # Image
-    image: rabbitmq:3.13-management-alpine
-    # Network
-    container_name: ${COMPANY_HIRING_RABBITMQ_HOST}
-    hostname: ${COMPANY_HIRING_RABBITMQ_HOST}
+  # Message broker for async event-driven communication between services
+  # Blog publishes events (post.created, post.updated, post.deleted)
+  # Notifications consumes events and sends notifications
+  # KRaft mode — built-in consensus, no Zookeeper dependency
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: ${COMPANY_HIRING_KAFKA_HOST}
+    hostname: ${COMPANY_HIRING_KAFKA_HOST}
     ports:
-      - "${COMPANY_HIRING_RABBITMQ_PORT}:5672"
-      - "${COMPANY_HIRING_RABBITMQ_MANAGEMENT_PORT}:15672"
+      - "${COMPANY_HIRING_KAFKA_PORT}:9092"
     networks:
       backend:
         aliases:
-          - ${COMPANY_HIRING_RABBITMQ_HOST}
-    # Runtime
-    user: rabbitmq
-    env_file:
-      - .envs/infra/services/rabbitmq/.env
+          - ${COMPANY_HIRING_KAFKA_HOST}
+    environment:
+      KAFKA_NODE_ID: 0
+      KAFKA_PROCESS_ROLES: controller,broker
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 0@${COMPANY_HIRING_KAFKA_HOST}:9093
+      # Listeners
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${COMPANY_HIRING_KAFKA_HOST}:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Topic defaults
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      # Log retention
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      # KRaft
+      CLUSTER_ID: "hiring-kafka-cluster-id-01"
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-      - ./builds/local/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - kafka_data:/tmp/kraft-combined-logs
     ulimits:
       nofile:
         soft: 65536
         hard: 65536
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ===========================================================================
+  # KAFKA UI (development only)
+  # ===========================================================================
+  # Web UI for browsing Kafka topics, messages, consumer groups
+  # Access at http://localhost:8090
+  # Remove in production
+  kafka_ui:
+    # Image
+    image: provectuslabs/kafka-ui:latest
+    # Network
+    container_name: ${COMPANY_HIRING_KAFKA_HOST}-ui
+    ports:
+      - "8090:8080"
+    networks:
+      - backend
+    # Runtime
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=hiring-local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=${COMPANY_HIRING_KAFKA_HOST}:9092
+      - DYNAMIC_CONFIG_ENABLED=true
     # Deploy
     deploy:
       resources:
@@ -267,14 +368,9 @@ services:
           memory: 512M
         reservations:
           memory: 256M
-    # entrypoint: ["docker-entrypoint.sh"]
-    command: ["rabbitmq-server"]
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+    depends_on:
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
 
 # =============================================================================
@@ -284,7 +380,7 @@ volumes:
   postgres_primary_data:
   postgres_replica_data:
   redis_data:
-  rabbitmq_data:
+  kafka_data:
 
 # =============================================================================
 # NETWORKS

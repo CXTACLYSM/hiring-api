@@ -2,6 +2,16 @@
 # HIRING SERVICE - MAKEFILE
 # =============================================================================
 
+# =============================================================================
+# SERVICE DEFINITIONS
+# =============================================================================
+
+# Application services (used for build, run, env generation)
+APP_SERVICES := auth blog notifications
+
+# Infrastructure services (used for env generation, infra-up/down)
+INFRA_SERVICES := postgres-primary postgres-replica redis kafka
+
 # Environment directories
 ENV_DIR := .envs
 ENV_APP_DIR := $(ENV_DIR)/app
@@ -26,6 +36,9 @@ NC     := \033[0m # No Color
 # Docker compose with env file
 DC := docker compose --env-file $(ENV_DIR)/.env
 
+# Kafka CLI base path (apache/kafka image)
+KAFKA_BIN := /opt/kafka/bin
+
 # =============================================================================
 # ENVIRONMENT MANAGEMENT
 # =============================================================================
@@ -46,31 +59,25 @@ env: ## Generate root .env from infra/.env
 .PHONY: env-infra
 env-infra: ## Generate service env files from templates
 	@echo "$(GREEN)Generating service env files from templates...$(NC)"
-	@# Ensure directories exist
-	@mkdir -p $(ENV_APP_SERVICES_DIR)/api
-	@mkdir -p $(ENV_APP_SERVICES_DIR)/worker
-	@mkdir -p $(ENV_INFRA_SERVICES_DIR)/postgres-primary
-	@mkdir -p $(ENV_INFRA_SERVICES_DIR)/postgres-replica
-	@mkdir -p $(ENV_INFRA_SERVICES_DIR)/redis
-	@mkdir -p $(ENV_INFRA_SERVICES_DIR)/rabbitmq
-	@# Load .env and generate service env files
 	@set -a && . $(ENV_INFRA_DIR)/.env && set +a && \
-		if [ -f $(ENV_APP_TEMPLATES_DIR)/.env.api.template ]; then \
-			envsubst < $(ENV_APP_TEMPLATES_DIR)/.env.api.template > $(ENV_APP_SERVICES_DIR)/api/.env; \
-			echo "  $(GREEN)✓$(NC) app/services/api/.env"; \
-		fi && \
-		if [ -f $(ENV_APP_TEMPLATES_DIR)/.env.worker.template ]; then \
-			envsubst < $(ENV_APP_TEMPLATES_DIR)/.env.worker.template > $(ENV_APP_SERVICES_DIR)/worker/.env; \
-			echo "  $(GREEN)✓$(NC) app/services/worker/.env"; \
-		fi && \
-		envsubst < $(ENV_INFRA_TEMPLATES_DIR)/.env.postgres-primary.template > $(ENV_INFRA_SERVICES_DIR)/postgres-primary/.env && \
-		echo "  $(GREEN)✓$(NC) infra/services/postgres-primary/.env" && \
-		envsubst < $(ENV_INFRA_TEMPLATES_DIR)/.env.postgres-replica.template > $(ENV_INFRA_SERVICES_DIR)/postgres-replica/.env && \
-		echo "  $(GREEN)✓$(NC) infra/services/postgres-replica/.env" && \
-		envsubst < $(ENV_INFRA_TEMPLATES_DIR)/.env.redis.template > $(ENV_INFRA_SERVICES_DIR)/redis/.env && \
-		echo "  $(GREEN)✓$(NC) infra/services/redis/.env" && \
-		envsubst < $(ENV_INFRA_TEMPLATES_DIR)/.env.rabbitmq.template > $(ENV_INFRA_SERVICES_DIR)/rabbitmq/.env && \
-		echo "  $(GREEN)✓$(NC) infra/services/rabbitmq/.env"
+		for svc in $(APP_SERVICES); do \
+			mkdir -p $(ENV_APP_SERVICES_DIR)/$$svc; \
+			if [ -f $(ENV_APP_TEMPLATES_DIR)/.env.$$svc.template ]; then \
+				envsubst < $(ENV_APP_TEMPLATES_DIR)/.env.$$svc.template > $(ENV_APP_SERVICES_DIR)/$$svc/.env; \
+				echo "  $(GREEN)✓$(NC) app/services/$$svc/.env"; \
+			else \
+				echo "  $(YELLOW)⚠$(NC) app/services/$$svc/.env — template not found, skipped"; \
+			fi; \
+		done && \
+		for svc in $(INFRA_SERVICES); do \
+			mkdir -p $(ENV_INFRA_SERVICES_DIR)/$$svc; \
+			if [ -f $(ENV_INFRA_TEMPLATES_DIR)/.env.$$svc.template ]; then \
+				envsubst < $(ENV_INFRA_TEMPLATES_DIR)/.env.$$svc.template > $(ENV_INFRA_SERVICES_DIR)/$$svc/.env; \
+				echo "  $(GREEN)✓$(NC) infra/services/$$svc/.env"; \
+			else \
+				echo "  $(YELLOW)⚠$(NC) infra/services/$$svc/.env — template not found, skipped"; \
+			fi; \
+		done
 	@echo "$(GREEN)All service env files generated!$(NC)"
 
 .PHONY: check-env
@@ -85,62 +92,76 @@ check-env: ## Check if infra/.env exists
 # DOCKER BUILD
 # =============================================================================
 
-# Image names
-API_IMAGE := ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/${COMPANY_HIRING_API_SERVICE_NAME}:${COMPANY_HIRING_VERSION}
-WORKER_IMAGE := ${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/${COMPANY_HIRING_WORKER_SERVICE_NAME}:${COMPANY_HIRING_VERSION}
+# Image name helper: $(call image_name,service)
+define image_name
+${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/$(1):${COMPANY_HIRING_VERSION}
+endef
 
-.PHONY: docker-build-api
-docker-build-api: ## Build API Docker image
-	@echo "$(GREEN)Building API image...$(NC)"
-	docker build -f builds/Dockerfile -t $(API_IMAGE) --target api .
-	@echo "$(GREEN)API image built: $(API_IMAGE)$(NC)"
+AUTH_IMAGE := $(call image_name,auth)
+BLOG_IMAGE := $(call image_name,blog)
+NOTIFICATIONS_IMAGE := $(call image_name,notifications)
 
-.PHONY: docker-build-worker
-docker-build-worker: ## Build Worker Docker image
-	@echo "$(GREEN)Building Worker image...$(NC)"
-	docker build -f builds/Dockerfile -t $(WORKER_IMAGE) --target worker .
-	@echo "$(GREEN)Worker image built: $(WORKER_IMAGE)$(NC)"
+.PHONY: docker-build-auth
+docker-build-auth: ## Build Auth Docker image
+	@echo "$(GREEN)Building Auth image...$(NC)"
+	docker build -f builds/Dockerfile -t $(AUTH_IMAGE) --target auth .
+	@echo "$(GREEN)Auth image built: $(AUTH_IMAGE)$(NC)"
+
+.PHONY: docker-build-blog
+docker-build-blog: ## Build Blog Docker image
+	@echo "$(GREEN)Building Blog image...$(NC)"
+	docker build -f builds/Dockerfile -t $(BLOG_IMAGE) --target blog .
+	@echo "$(GREEN)Blog image built: $(BLOG_IMAGE)$(NC)"
+
+.PHONY: docker-build-notifications
+docker-build-notifications: ## Build Notifications Docker image
+	@echo "$(GREEN)Building Notifications image...$(NC)"
+	docker build -f builds/Dockerfile -t $(NOTIFICATIONS_IMAGE) --target notifications .
+	@echo "$(GREEN)Notifications image built: $(NOTIFICATIONS_IMAGE)$(NC)"
 
 .PHONY: docker-build
-docker-build: docker-build-api docker-build-worker ## Build all Docker images
+docker-build: docker-build-auth docker-build-blog docker-build-notifications ## Build all Docker images
 	@echo "$(GREEN)All images built!$(NC)"
 
 # =============================================================================
 # RUN SERVICES
 # =============================================================================
 
-.PHONY: check-api-image
-check-api-image:
-	@if ! docker image inspect $(API_IMAGE) >/dev/null 2>&1; then \
-		echo "$(YELLOW)API image not found, building...$(NC)"; \
-		$(MAKE) docker-build-api; \
-	fi
+.PHONY: check-images
+check-images:
+	@for svc in $(APP_SERVICES); do \
+		img=$(call image_name,$$svc); \
+		if ! docker image inspect $$img >/dev/null 2>&1; then \
+			echo "$(YELLOW)$$svc image not found, building...$(NC)"; \
+			$(MAKE) docker-build-$$svc; \
+		fi; \
+	done
 
-.PHONY: check-worker-image
-check-worker-image:
-	@if ! docker image inspect $(WORKER_IMAGE) >/dev/null 2>&1; then \
-		echo "$(YELLOW)Worker image not found, building...$(NC)"; \
-		$(MAKE) docker-build-worker; \
-	fi
-
-.PHONY: run-api
-run-api: check-env env env-infra docker-build-api ## Run API service
-	@echo "$(GREEN)Starting API service...$(NC)"
-	$(DC) up -d api --force-recreate
-	@echo "$(GREEN)API started!$(NC)"
+.PHONY: run-auth
+run-auth: check-env env env-infra docker-build-auth ## Run Auth service
+	@echo "$(GREEN)Starting Auth service...$(NC)"
+	$(DC) up -d auth --force-recreate
+	@echo "$(GREEN)Auth started!$(NC)"
 	@$(MAKE) status
 
-.PHONY: run-worker
-run-worker: check-env env env-infra docker-build-worker ## Run Worker service
-	@echo "$(GREEN)Starting Worker service...$(NC)"
-	$(DC) up -d worker --force-recreate
-	@echo "$(GREEN)Worker started!$(NC)"
+.PHONY: run-blog
+run-blog: check-env env env-infra docker-build-blog ## Run Blog service
+	@echo "$(GREEN)Starting Blog service...$(NC)"
+	$(DC) up -d blog --force-recreate
+	@echo "$(GREEN)Blog started!$(NC)"
+	@$(MAKE) status
+
+.PHONY: run-notifications
+run-notifications: check-env env env-infra docker-build-notifications ## Run Notifications service
+	@echo "$(GREEN)Starting Notifications service...$(NC)"
+	$(DC) up -d notifications --force-recreate
+	@echo "$(GREEN)Notifications started!$(NC)"
 	@$(MAKE) status
 
 .PHONY: run
-run: check-env env env-infra check-api-image check-worker-image ## Run API and Worker services
-	@echo "$(GREEN)Starting API and Worker services...$(NC)"
-	$(DC) up -d api worker
+run: check-env env env-infra check-images ## Run all application services
+	@echo "$(GREEN)Starting all application services...$(NC)"
+	$(DC) up -d auth blog notifications
 	@echo "$(GREEN)Services started!$(NC)"
 	@$(MAKE) status
 
@@ -153,15 +174,8 @@ config: ## Show resolved docker compose configuration
 	$(DC) config
 
 .PHONY: up
-up: check-env env env-infra ## Start all services
+up: check-env env env-infra docker-build ## Start all services
 	@echo "$(GREEN)Starting all services...$(NC)"
-	$(DC) up -d
-	@echo "$(GREEN)Services started!$(NC)"
-	@$(MAKE) status
-
-.PHONY: up-build
-up-build: check-env env env-infra ## Start all services with rebuild
-	@echo "$(GREEN)Building and starting all services...$(NC)"
 	$(DC) up -d --build
 	@echo "$(GREEN)Services started!$(NC)"
 	@$(MAKE) status
@@ -191,16 +205,24 @@ logs-db: ## Show PostgreSQL logs (primary and replica)
 	$(DC) logs -f postgres_primary postgres_replica
 
 .PHONY: logs-app
-logs-app: ## Show api and worker logs
-	$(DC) logs -f api worker
+logs-app: ## Show all application service logs
+	$(DC) logs -f auth blog notifications
 
-.PHONY: logs-api
-logs-api: ## Show api logs
-	$(DC) logs -f api
+.PHONY: logs-auth
+logs-auth: ## Show auth logs
+	$(DC) logs -f auth
 
-.PHONY: logs-worker
-logs-worker: ## Show worker logs
-	$(DC) logs -f worker
+.PHONY: logs-blog
+logs-blog: ## Show blog logs
+	$(DC) logs -f blog
+
+.PHONY: logs-notifications
+logs-notifications: ## Show notifications logs
+	$(DC) logs -f notifications
+
+.PHONY: logs-kafka
+logs-kafka: ## Show Kafka logs
+	$(DC) logs -f kafka
 
 .PHONY: status
 status: ## Show status of all services
@@ -214,16 +236,16 @@ status: ## Show status of all services
 # =============================================================================
 
 .PHONY: infra-up
-infra-up: check-env env env-infra ## Start only infrastructure (postgres, redis, rabbitmq)
+infra-up: check-env env env-infra ## Start only infrastructure (postgres, redis, kafka)
 	@echo "$(GREEN)Starting infrastructure services...$(NC)"
-	$(DC) up -d postgres_primary postgres_replica redis rabbitmq
+	$(DC) up -d postgres_primary postgres_replica redis kafka
 	@echo "$(GREEN)Infrastructure started!$(NC)"
 	@$(MAKE) status
 
 .PHONY: infra-down
 infra-down: ## Stop infrastructure services
 	@echo "$(YELLOW)Stopping infrastructure services...$(NC)"
-	$(DC) stop postgres_primary postgres_replica redis rabbitmq
+	$(DC) stop postgres_primary postgres_replica redis kafka
 	@echo "$(GREEN)Infrastructure stopped!$(NC)"
 
 # =============================================================================
@@ -348,6 +370,47 @@ pg-read-log-full: ## Tail full log on replica (unfiltered)
 	docker logs -f $(COMPANY_HIRING_POSTGRES_REPLICA_HOST)
 
 # =============================================================================
+# KAFKA
+# =============================================================================
+
+.PHONY: kafka-topics
+kafka-topics: ## List all Kafka topics
+	@echo "$(GREEN)=== Kafka Topics ===$(NC)"
+	docker exec -it $(COMPANY_HIRING_KAFKA_HOST) $(KAFKA_BIN)/kafka-topics.sh \
+		--bootstrap-server localhost:9092 --list
+
+.PHONY: kafka-create-topic
+kafka-create-topic: ## Create Kafka topic (usage: make kafka-create-topic name=post.created partitions=3)
+	@if [ -z "$(name)" ]; then \
+		echo "$(RED)Error: Please provide topic name$(NC)"; \
+		echo "Usage: make kafka-create-topic name=post.created partitions=3"; \
+		exit 1; \
+	fi
+	docker exec -it $(COMPANY_HIRING_KAFKA_HOST) $(KAFKA_BIN)/kafka-topics.sh \
+		--bootstrap-server localhost:9092 \
+		--create --topic $(name) \
+		--partitions $(or $(partitions),3) \
+		--replication-factor 1
+	@echo "$(GREEN)Topic '$(name)' created!$(NC)"
+
+.PHONY: kafka-describe-topic
+kafka-describe-topic: ## Describe Kafka topic (usage: make kafka-describe-topic name=post.created)
+	@if [ -z "$(name)" ]; then \
+		echo "$(RED)Error: Please provide topic name$(NC)"; \
+		echo "Usage: make kafka-describe-topic name=post.created"; \
+		exit 1; \
+	fi
+	docker exec -it $(COMPANY_HIRING_KAFKA_HOST) $(KAFKA_BIN)/kafka-topics.sh \
+		--bootstrap-server localhost:9092 \
+		--describe --topic $(name)
+
+.PHONY: kafka-consumer-groups
+kafka-consumer-groups: ## List Kafka consumer groups
+	@echo "$(GREEN)=== Kafka Consumer Groups ===$(NC)"
+	docker exec -it $(COMPANY_HIRING_KAFKA_HOST) $(KAFKA_BIN)/kafka-consumer-groups.sh \
+		--bootstrap-server localhost:9092 --list
+
+# =============================================================================
 # MIGRATIONS
 # =============================================================================
 
@@ -410,8 +473,11 @@ migrate-create: ## Create new migration (usage: make migrate-create name=create_
 .PHONY: build
 build: ## Build Go applications
 	@echo "$(GREEN)Building applications...$(NC)"
-	CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o bin/api ./cmd/api/main.go
-	CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o bin/worker ./cmd/worker/main.go
+	@for svc in $(APP_SERVICES); do \
+		echo "  Building $$svc..."; \
+		CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o bin/$$svc ./cmd/$$svc/main.go; \
+		echo "  $(GREEN)✓$(NC) bin/$$svc"; \
+	done
 	@echo "$(GREEN)Build completed!$(NC)"
 
 # =============================================================================
@@ -423,12 +489,12 @@ clean: ## Clean build artifacts and docker resources
 	@echo "$(YELLOW)Cleaning...$(NC)"
 	rm -rf bin/
 	rm -f $(ENV_DIR)/.env
-	rm -f $(ENV_APP_SERVICES_DIR)/api/.env
-	rm -f $(ENV_APP_SERVICES_DIR)/worker/.env
-	rm -f $(ENV_INFRA_SERVICES_DIR)/postgres-primary/.env
-	rm -f $(ENV_INFRA_SERVICES_DIR)/postgres-replica/.env
-	rm -f $(ENV_INFRA_SERVICES_DIR)/redis/.env
-	rm -f $(ENV_INFRA_SERVICES_DIR)/rabbitmq/.env
+	@for svc in $(APP_SERVICES); do \
+		rm -f $(ENV_APP_SERVICES_DIR)/$$svc/.env; \
+	done
+	@for svc in $(INFRA_SERVICES); do \
+		rm -f $(ENV_INFRA_SERVICES_DIR)/$$svc/.env; \
+	done
 	$(DC) down --rmi local --remove-orphans 2>/dev/null || true
 	@echo "$(GREEN)Cleaned!$(NC)"
 
@@ -447,16 +513,14 @@ audit: ## Run full system audit (env, images, status, replication)
 	@sleep 1
 	@echo ""
 	@echo "$(GREEN)[2/5] Checking Docker images...$(NC)"
-	@if docker image inspect $(API_IMAGE) >/dev/null 2>&1; then \
-		echo "  $(GREEN)✓$(NC) API image: $(API_IMAGE)"; \
-	else \
-		echo "  $(RED)✗$(NC) API image: $(API_IMAGE) - NOT FOUND"; \
-	fi
-	@if docker image inspect $(WORKER_IMAGE) >/dev/null 2>&1; then \
-		echo "  $(GREEN)✓$(NC) Worker image: $(WORKER_IMAGE)"; \
-	else \
-		echo "  $(RED)✗$(NC) Worker image: $(WORKER_IMAGE) - NOT FOUND"; \
-	fi
+	@for svc in $(APP_SERVICES); do \
+		img="${COMPANY_DOCKER_REGISTRY_HOST}/${COMPANY_HIRING_PROJECT_NAME}/$$svc:${COMPANY_HIRING_VERSION}"; \
+		if docker image inspect $$img >/dev/null 2>&1; then \
+			echo "  $(GREEN)✓$(NC) $$svc image: $$img"; \
+		else \
+			echo "  $(RED)✗$(NC) $$svc image: $$img - NOT FOUND"; \
+		fi; \
+	done
 	@sleep 1
 	@echo ""
 	@echo "$(GREEN)[3/5] Services status...$(NC)"
@@ -491,66 +555,39 @@ help: ## Show this help
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "$(GREEN)Environment:$(NC)"
-	@awk -F ':.*?## ' '/^env:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "env", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^env-infra:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "env-infra", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^check-env:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "check-env", $$2}' $(MAKEFILE_LIST)
+	@grep -E '^(env|env-infra|check-env):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Docker Compose:$(NC)"
-	@awk -F ':.*?## ' '/^up:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "up", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^up-build:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "up-build", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^down:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "down", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^down-v:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "down-v", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^restart:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "restart", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^logs:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "logs", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^logs-db:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "logs-db", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^status:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "status", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^config:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "config", $$2}' $(MAKEFILE_LIST)
+	@grep -E '^(up|up-build|down|down-v|restart|logs|logs-db|logs-app|logs-auth|logs-blog|logs-notifications|logs-kafka|status|config):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Infrastructure:$(NC)"
-	@awk -F ':.*?## ' '/^infra-up:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "infra-up", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^infra-down:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "infra-down", $$2}' $(MAKEFILE_LIST)
+	@grep -E '^(infra-up|infra-down):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Docker Build:$(NC)"
-	@awk -F ':.*?## ' '/^docker-build:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "docker-build", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^docker-build-api:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "docker-build-api", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^docker-build-worker:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "docker-build-worker", $$2}' $(MAKEFILE_LIST)
+	@grep -E '^(docker-build|docker-build-auth|docker-build-blog|docker-build-notifications):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Run Services:$(NC)"
-	@awk -F ':.*?## ' '/^run:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "run", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^run-api:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "run-api", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^run-worker:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "run-worker", $$2}' $(MAKEFILE_LIST)
+	@grep -E '^(run|run-auth|run-blog|run-notifications):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)PostgreSQL Replication:$(NC)"
-	@awk -F ':.*?## ' '/^pg-replication-status:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-replication-status", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^pg-replication-lag:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-replication-lag", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^pg-test-replication:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-test-replication", $$2}' $(MAKEFILE_LIST)
+	@grep -E '^(pg-replication-status|pg-replication-lag|pg-test-replication):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Database Shells:$(NC)"
-	@awk -F ':.*?## ' '/^pg-primary:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-primary", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^pg-replica:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-replica", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^pg-write:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-write", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^pg-read:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-read", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^redis-cli:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "redis-cli", $$2}' $(MAKEFILE_LIST)
+	@grep -E '^(pg-primary|pg-replica|pg-write|pg-read|redis-cli):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(GREEN)Kafka:$(NC)"
+	@grep -E '^(kafka-topics|kafka-create-topic|kafka-describe-topic|kafka-consumer-groups):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Migrations:$(NC)"
-	@awk -F ':.*?## ' '/^migrate-up:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "migrate-up", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^migrate-down:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "migrate-down", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^migrate-status:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "migrate-status", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^migrate-create:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "migrate-create", $$2}' $(MAKEFILE_LIST)
-	@echo ""
-	@echo "$(GREEN)Build & Utilities:$(NC)"
-	@awk -F ':.*?## ' '/^build:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "build", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^clean:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "clean", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^audit:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "audit", $$2}' $(MAKEFILE_LIST)
+	@grep -E '^(migrate-up|migrate-down|migrate-status|migrate-create):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Database Monitoring:$(NC)"
-	@awk -F ':.*?## ' '/^pg-write-monitor:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-write-monitor", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^pg-read-monitor:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-read-monitor", $$2}' $(MAKEFILE_LIST)
+	@grep -E '^(pg-write-monitor|pg-read-monitor):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Database Query Logs:$(NC)"
-	@awk -F ':.*?## ' '/^pg-write-log:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-write-log", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^pg-read-log:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-read-log", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^pg-write-log-full:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-write-log-full", $$2}' $(MAKEFILE_LIST)
-	@awk -F ':.*?## ' '/^pg-read-log-full:.*## /{printf "  \033[36m%-24s\033[0m %s\n", "pg-read-log-full", $$2}' $(MAKEFILE_LIST)
+	@grep -E '^(pg-write-log|pg-read-log|pg-write-log-full|pg-read-log-full):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(GREEN)Build & Utilities:$(NC)"
+	@grep -E '^(build|clean|audit):.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 
 .DEFAULT_GOAL := help
