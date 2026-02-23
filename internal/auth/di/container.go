@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/CXTACLYSM/hiring-api/configs/auth"
-	pkgPostgres "github.com/CXTACLYSM/hiring-api/configs/blog/database/persistence/postgres"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/shared/infrastructure/middlewares"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/tokens"
 	createOneUser "github.com/CXTACLYSM/hiring-api/internal/auth/user/application/commands/createOne"
@@ -13,18 +12,26 @@ import (
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/infrastructure/commands/createOne"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/infrastructure/handlers"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/infrastructure/queries/findOne"
+	"github.com/CXTACLYSM/hiring-api/pkg/kafka"
 	pgConnector "github.com/CXTACLYSM/hiring-api/pkg/postgres"
-	"github.com/CXTACLYSM/hiring-api/pkg/redis"
+	redisConnector "github.com/CXTACLYSM/hiring-api/pkg/redis"
 	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/cache"
 	pkgHandlers "github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/handlers"
 	pkgMiddlewares "github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/middlewares"
 	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/validation"
+	"github.com/IBM/sarama"
 	"github.com/go-playground/validator/v10"
 )
 
 type Infrastructure struct {
-	PgConnector *pgConnector.Connector
-	Redis       *redis.Connector
+	PgConnector    *pgConnector.Connector
+	RedisConnector *redisConnector.Connector
+	Kafka          *Kafka
+}
+
+type Kafka struct {
+	SyncProducer sarama.SyncProducer
+	Publisher    *kafka.Publisher
 }
 
 type Queries struct {
@@ -97,28 +104,43 @@ func (c *Container) Init(cfg *configs.Config) error {
 }
 
 func (c *Container) initInfrastructure(cfg *configs.Config) error {
-	readDSN, err := cfg.PostgresCluster.DSN(pkgPostgres.ReadOperation)
+	readDSN, err := cfg.PostgresCluster.DSN(pgConnector.ReadOperation)
 	if err != nil {
 		return fmt.Errorf("error initializing infra read pgx pool: %w", err)
 	}
-	writeDSN, err := cfg.PostgresCluster.DSN(pkgPostgres.WriteOperation)
+	writeDSN, err := cfg.PostgresCluster.DSN(pgConnector.WriteOperation)
 	if err != nil {
 		return fmt.Errorf("error initializing infra write pgx pool: %w", err)
 	}
 	pgConn, err := pgConnector.NewConnector(readDSN, writeDSN)
 	if err != nil {
-		return fmt.Errorf("failed to connect to postgres: %v", err)
+		return fmt.Errorf("failed to connect to postgres: %w", err)
 	}
 
 	authCfg, resourceCfg := cfg.Redis.ConnectorConfigs()
-	redisConn, err := redis.NewConnector(authCfg, resourceCfg)
+	redisConn, err := redisConnector.NewConnector(authCfg, resourceCfg)
 	if err != nil {
-		return fmt.Errorf("failed to create redis connector: %w", err)
+		return fmt.Errorf("failed to connecto to redis: %w", err)
 	}
 
+	config := sarama.NewConfig()
+	config.Version = sarama.V3_6_0_0
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+
+	producer, err := sarama.NewSyncProducer(cfg.Kafka.Brokers(), config)
+	if err != nil {
+		return err
+	}
+	publisher := kafka.NewPublisher(producer)
+
 	c.Infrastructure = &Infrastructure{
-		PgConnector: pgConn,
-		Redis:       redisConn,
+		PgConnector:    pgConn,
+		RedisConnector: redisConn,
+		Kafka: &Kafka{
+			SyncProducer: producer,
+			Publisher:    publisher,
+		},
 	}
 
 	return nil
@@ -142,7 +164,7 @@ func (c *Container) initCommands() error {
 
 func (c *Container) initCacheEntities() error {
 	c.CacheEntities = &CacheEntities{
-		UserCache: cache.NewUserCache(c.Infrastructure.Redis.AuthPool),
+		UserCache: cache.NewUserCache(c.Infrastructure.RedisConnector.AuthPool),
 	}
 
 	return nil
@@ -167,7 +189,7 @@ func (c *Container) initServices(cfg *configs.Config) error {
 	tokenGenerator := tokens.NewJwtTokenGenerator(cfg.App.JwtSecret)
 
 	c.Services = &Services{
-		authService: services.NewAuthService(c.Validator, c.Queries.FindOneUser, c.Commands.CreateOneUser, tokenGenerator),
+		authService: services.NewAuthService(c.Validator, c.Queries.FindOneUser, c.Commands.CreateOneUser, tokenGenerator, c.Infrastructure.Kafka.Publisher),
 		userService: services.NewUserService(c.Queries.FindOneUser, c.Commands.CreateOneUser),
 	}
 

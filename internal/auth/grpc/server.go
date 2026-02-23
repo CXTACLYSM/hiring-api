@@ -3,7 +3,6 @@ package grpc
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/CXTACLYSM/hiring-api/internal/auth/tokens"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/queries/findOne"
@@ -27,7 +26,6 @@ func NewAuthServer(secretKey []byte, userFinder findOne.Handler) *AuthServer {
 }
 
 func (s *AuthServer) ValidateToken(ctx context.Context, req *pb.ValidateTokenRequest) (*pb.ValidateTokenResponse, error) {
-	log.Println("[DEBUG]: validating token")
 	claims := &tokens.Claims{}
 	_, err := jwt.NewParser().ParseWithClaims(req.Token, claims, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {

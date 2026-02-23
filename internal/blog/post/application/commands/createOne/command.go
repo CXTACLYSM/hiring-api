@@ -3,9 +3,9 @@ package createOne
 import "github.com/CXTACLYSM/hiring-api/internal/blog/post/domain/entities"
 
 type Command struct {
+	UserId  string
 	Name    string
 	Content string
-	UserId  string
 }
 
 type Handler interface {

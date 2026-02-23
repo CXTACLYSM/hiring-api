@@ -47,9 +47,9 @@ func (s *PostService) CreateOne(dto *dto.CreateOneDTO) (*entities.Post, error) {
 
 	post, err := s.createOnePost.Handle(
 		createOne.Command{
+			UserId:  dto.UserId,
 			Name:    dto.Name,
 			Content: dto.Content,
-			UserId:  dto.UserId,
 		},
 	)
 	if err != nil {
@@ -66,10 +66,10 @@ func (s *PostService) UpdateOne(dto *dto.UpdateOneDTO) (*entities.Post, error) {
 
 	post, err := s.updateOnePost.Handle(
 		updateOne.Command{
+			UserId:  dto.UserId,
 			Id:      dto.Id,
 			Name:    dto.Name,
 			Content: dto.Content,
-			UserId:  dto.UserId,
 		},
 	)
 	if err != nil {
@@ -86,7 +86,8 @@ func (s *PostService) DeleteOne(dto *dto.DeleteOneDTO) error {
 
 	err := s.deleteOnePost.Handle(
 		deleteOne.Command{
-			Id: dto.Id,
+			UserId: dto.UserId,
+			Id:     dto.Id,
 		},
 	)
 	if err != nil {
@@ -103,7 +104,8 @@ func (s *PostService) FindOne(dto *dto.FindOneDTO) (*entities.Post, error) {
 
 	post, err := s.findOnePost.Handle(
 		findOne.Query{
-			Id: dto.Id,
+			UserId: dto.UserId,
+			Id:     dto.Id,
 		},
 	)
 	if err != nil {
@@ -120,6 +122,7 @@ func (s *PostService) FindList(dto *dto.ListDTO) ([]*entities.Post, error) {
 
 	postList, err := s.findListPost.Handle(
 		findList.Query{
+			UserId:  dto.UserId,
 			Name:    dto.Name,
 			Content: dto.Content,
 		},

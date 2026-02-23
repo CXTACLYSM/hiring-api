@@ -26,11 +26,12 @@ func main() {
 	}
 
 	container := &di.Container{}
-	err = container.Init(cfg)
-	if err != nil {
+	if err = container.Init(cfg); err != nil {
 		log.Fatalf("Error initializing container: %s", err.Error())
 	}
 	defer container.Infrastructure.PgConnector.Close()
+	defer container.Infrastructure.RedisConnector.Close()
+	defer container.Infrastructure.Kafka.Publisher.Close()
 
 	r := auth.InitRouter(container.Middlewares, container.Handlers)
 	srv := &http.Server{

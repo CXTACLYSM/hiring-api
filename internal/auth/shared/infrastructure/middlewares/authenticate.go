@@ -34,21 +34,21 @@ func NewAuthenticate(
 
 func (m *Authenticate) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		encodedToken, ok := httputils.ExtractBearerToken(r)
+		token, ok := httputils.ExtractBearerToken(r)
 		if !ok {
 			httputils.ResponseError(w, http.StatusUnauthorized, "missing or invalid authorization header")
 			return
 		}
 
-		cacheKey := cache.UserAuthTokenKeyPrefix + encodedToken
-		if user, found := m.userCache.Get(cacheKey); found {
+		userCacheKey := m.userCache.Key(token)
+		if user, found := m.userCache.Get(userCacheKey); found {
 			ctx := context.WithValue(r.Context(), middlewares.UserKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
 		claims := &tokens.Claims{}
-		_, err := jwt.NewParser().ParseWithClaims(encodedToken, claims, func(token *jwt.Token) (any, error) {
+		_, err := jwt.NewParser().ParseWithClaims(token, claims, func(token *jwt.Token) (any, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
@@ -72,12 +72,12 @@ func (m *Authenticate) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		err = m.userCache.Set(cacheKey, user.ToShared())
+		err = m.userCache.Set(userCacheKey, user.ToShared())
 		if err != nil {
-			log.Printf("error SET redis key %s: %v", cacheKey, err)
+			log.Printf("error SET redis key %s: %v", userCacheKey, err)
 		}
 
-		ctx := context.WithValue(r.Context(), middlewares.UserKey, user)
+		ctx := context.WithValue(r.Context(), middlewares.UserKey, user.ToShared())
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/CXTACLYSM/hiring-api/configs/blog/database/persistence/postgres"
+	"github.com/CXTACLYSM/hiring-api/pkg/postgres"
 )
 
 type ClusterConfig struct {

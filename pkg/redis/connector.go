@@ -82,7 +82,7 @@ func newPool(cfg *Config) (*redis.Pool, error) {
 	defer conn.Close()
 	_, err := conn.Do("PING")
 	if err != nil {
-		return nil, fmt.Errorf("error pinging redis: %v", cfg)
+		return nil, fmt.Errorf("error pinging redis %s:%d db=%d: %w", cfg.Host, cfg.Port, cfg.Db, err)
 	}
 
 	return pool, nil

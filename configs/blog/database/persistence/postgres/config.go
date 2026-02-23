@@ -3,11 +3,8 @@ package postgres
 import (
 	"errors"
 	"fmt"
-)
 
-const (
-	WriteOperation = 1
-	ReadOperation  = 2
+	"github.com/CXTACLYSM/hiring-api/pkg/postgres"
 )
 
 type ClusterConfig struct {
@@ -25,15 +22,15 @@ type Config struct {
 
 func (c *ClusterConfig) DSN(operation uint8) (string, error) {
 	switch operation {
-	case WriteOperation:
-		return fmt.Sprintf(
-			"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-			c.Write.Host, c.Write.Port, c.Write.Username, c.Write.Password, c.Write.Database,
-		), nil
-	case ReadOperation:
+	case postgres.ReadOperation:
 		return fmt.Sprintf(
 			"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 			c.Read.Host, c.Read.Port, c.Read.Username, c.Read.Password, c.Read.Database,
+		), nil
+	case postgres.WriteOperation:
+		return fmt.Sprintf(
+			"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+			c.Write.Host, c.Write.Port, c.Write.Username, c.Write.Password, c.Write.Database,
 		), nil
 	default:
 		return "", errors.New("invalid pool type")

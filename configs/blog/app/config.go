@@ -7,6 +7,7 @@ import (
 )
 
 type Config struct {
+	Name    string
 	Version string
 	Host    string
 	Http    Http
@@ -24,6 +25,9 @@ type Http struct {
 func (c *Config) Validate() error {
 	var errorList []error
 
+	if c.Name == "" {
+		errorList = append(errorList, fmt.Errorf("application name can't be empty"))
+	}
 	if c.Version == "" {
 		errorList = append(errorList, fmt.Errorf("version can't be empty"))
 	}

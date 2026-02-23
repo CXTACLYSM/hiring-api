@@ -23,7 +23,7 @@ func InitRouter(middlewares *di.Middlewares, handlers *di.Handlers) chi.Router {
 		r.Get("/info", handlers.Info.ServeHTTP)
 
 		r.Group(func(r chi.Router) {
-			r.Use(middlewares.Authenticate)
+			r.Use(middlewares.Authenticate.Authenticate)
 
 			r.Get("/posts", handlers.FindListPost.ServeHTTP)
 			r.Get("/posts/{id}", handlers.FindOnePost.ServeHTTP)

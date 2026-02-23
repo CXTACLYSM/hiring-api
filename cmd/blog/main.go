@@ -18,19 +18,19 @@ import (
 func main() {
 	cfg, err := configs.Create()
 	if err != nil {
-		log.Fatalf("")
+		log.Fatalf("Error creating config: %v", err)
 	}
 
 	container := &di.Container{}
-	err = container.Init(cfg)
-	if err != nil {
-		log.Fatalf("")
+	if err = container.Init(cfg); err != nil {
+		log.Fatalf("Error initializing container: %s", err.Error())
 	}
 	defer container.Infrastructure.PgConnector.Close()
+	defer container.Infrastructure.RedisConnector.Close()
 
 	r := blog.InitRouter(container.Middlewares, container.Handlers)
 	srv := http.Server{
-		Addr:              cfg.App.SocketStr(),
+		Addr:              cfg.App.HttpSocketStr(),
 		Handler:           r,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
@@ -40,7 +40,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Starting http server on %s", cfg.App.SocketStr())
+		log.Printf("Starting http server on %s", cfg.App.HttpSocketStr())
 		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("error starting http server: %v", err)
 		}

@@ -45,10 +45,11 @@ func Create() (*Config, error) {
 
 	config := &Config{
 		App: &app.Config{
+			Name:    viper.GetString("APP_NAME"),
 			Version: viper.GetString("APP_VERSION"),
 			Host:    viper.GetString("APP_HOST"),
 			Http: app.Http{
-				Port:              viper.GetInt("APP_PORT"),
+				Port:              viper.GetInt("APP_HTTP_PORT"),
 				ReadHeaderTimeout: 5 * time.Second,
 				ReadTimeout:       10 * time.Second,
 				WriteTimeout:      35 * time.Second,

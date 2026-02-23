@@ -1,8 +1,8 @@
 package deleteOne
 
 type Command struct {
-	Id     string
 	UserId string
+	Id     string
 }
 
 type Handler interface {

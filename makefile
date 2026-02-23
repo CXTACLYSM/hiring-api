@@ -426,11 +426,9 @@ migrate-up: ## Run all pending migrations
 		-v $(PWD)/$(PG_MIGRATIONS_PATH):/migrations \
 		--network $(PG_NETWORK) \
 		migrate/migrate:latest \
-		-path=/migrations/$(path) \
+		-path=/migrations \
 		-database "$(PG_DSN)" \
 		up
-	@echo "$(GREEN)Migrations completed!$(NC)"
-	@echo "$(YELLOW)Note: Changes will automatically replicate to REPLICA$(NC)"
 
 .PHONY: migrate-down
 migrate-down: ## Rollback last migration
@@ -463,7 +461,7 @@ migrate-create: ## Create new migration (usage: make migrate-create name=create_
 	docker run --rm \
 		-v $(PWD)/$(PG_MIGRATIONS_PATH):/migrations \
 		migrate/migrate:latest \
-		create -ext sql -dir /migrations/$(path) -seq $(name)
+		create -ext sql -dir /migrations -seq $(name)
 	@echo "$(GREEN)Migration created!$(NC)"
 
 # =============================================================================

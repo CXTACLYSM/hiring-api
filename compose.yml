@@ -26,8 +26,8 @@ services:
     container_name: ${COMPANY_HIRING_AUTH_HOST}
     hostname: ${COMPANY_HIRING_AUTH_HOST}
     ports:
-      - "8080:8080"
-      - "50051:50051"
+      - "8080:${COMPANY_HIRING_AUTH_HTTP_PORT}"
+      - "50051:${COMPANY_HIRING_AUTH_GRPC_PORT}"
     networks:
       - backend
     # Runtime
@@ -43,7 +43,7 @@ services:
           memory: 256M
     command: ["./auth"]
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://auth.hiring.company:8080/ping"]
+      test: ["CMD", "wget", "--spider", "-q", "http://${COMPANY_HIRING_AUTH_HOST}:${COMPANY_HIRING_AUTH_HTTP_PORT}/ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -70,7 +70,7 @@ services:
     container_name: ${COMPANY_HIRING_BLOG_HOST}
     hostname: ${COMPANY_HIRING_BLOG_HOST}
     ports:
-      - "8081:8081"
+      - "8081:${COMPANY_HIRING_BLOG_HTTP_PORT}"
     networks:
       - backend
     # Runtime
@@ -86,7 +86,7 @@ services:
           memory: 256M
     command: ["./blog"]
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/ping"]
+      test: ["CMD", "wget", "--spider", "-q", "http://${COMPANY_HIRING_BLOG_HOST}:${COMPANY_HIRING_BLOG_HTTP_PORT}/ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -116,8 +116,8 @@ services:
     # Network
     container_name: ${COMPANY_HIRING_NOTIFICATIONS_HOST}
     hostname: ${COMPANY_HIRING_NOTIFICATIONS_HOST}
-    ports:
-      - "8082:8082"
+#    ports:
+#      -
     networks:
       - backend
     # Runtime
@@ -247,38 +247,35 @@ services:
   # In-memory cache and session store
   # Used for: token blacklist, rate limiting, caching
   redis:
-    # Image
     image: redis:7.4-alpine
-    # Network
     container_name: ${COMPANY_HIRING_REDIS_HOST}
     hostname: ${COMPANY_HIRING_REDIS_HOST}
     ports:
-      - "${COMPANY_HIRING_REDIS_PORT}:6379"
+      - "6379:${COMPANY_HIRING_REDIS_PORT}"
     networks:
       backend:
         aliases:
           - ${COMPANY_HIRING_REDIS_HOST}
-    # Runtime
     user: redis
     env_file:
       - .envs/infra/services/redis/.env
     volumes:
       - redis_data:/data
       - ./builds/local/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./scripts/init/redis-init.sh:/usr/local/bin/redis-init.sh:ro
     ulimits:
       nofile:
         soft: 65536
         hard: 65536
-    # Deploy
     deploy:
       resources:
         limits:
           memory: 256M
         reservations:
           memory: 128M
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    command: ["/bin/sh", "/usr/local/bin/redis-init.sh"]
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "$$REDIS_PASSWORD", "ping"]
+      test: ["CMD", "redis-cli", "--user", "${COMPANY_HIRING_REDIS_USERNAME}", "-a", "$$REDIS_PASSWORD", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -316,6 +313,9 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_NUM_PARTITIONS: 3
       KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       # Log retention
       KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_LOG_SEGMENT_BYTES: 1073741824
@@ -340,6 +340,22 @@ services:
       retries: 5
       start_period: 30s
     restart: unless-stopped
+
+  kafka-init:
+    image: apache/kafka:3.9.0
+    container_name: kafka-init
+    networks:
+      - backend
+    environment:
+      KAFKA_HOST: ${COMPANY_HIRING_KAFKA_HOST}
+      KAFKA_PORT: ${COMPANY_HIRING_KAFKA_PORT}
+    volumes:
+      - ./scripts/init/kafka-init.sh:/opt/kafka/scripts/kafka-init.sh:ro
+    command: [ "/bin/bash", "/opt/kafka/scripts/kafka-init.sh" ]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
 
   # ===========================================================================
   # KAFKA UI (development only)

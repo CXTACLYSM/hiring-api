@@ -2,10 +2,10 @@ package configs
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/CXTACLYSM/hiring-api/configs/auth/app"
+	"github.com/CXTACLYSM/hiring-api/configs/auth/brokers/kafka"
 	"github.com/CXTACLYSM/hiring-api/configs/auth/database/cache/redis"
 	"github.com/CXTACLYSM/hiring-api/configs/auth/database/persistence/postgres"
 	"github.com/spf13/viper"
@@ -15,27 +15,7 @@ type Config struct {
 	App             *app.Config
 	PostgresCluster *postgres.ClusterConfig
 	Redis           *redis.Config
-	Kafka           *Kafka
-}
-
-type Kafka struct {
-	Host string
-	Port int
-}
-
-func (k *Kafka) Brokers() []string {
-	return []string{fmt.Sprintf("%s:%d", k.Host, k.Port)}
-}
-
-func (k *Kafka) Validate() error {
-	var errorList []error
-	if k.Host == "" {
-		errorList = append(errorList, fmt.Errorf("kafka host is required"))
-	}
-	if k.Port == 0 {
-		errorList = append(errorList, fmt.Errorf("kafka port is required"))
-	}
-	return errors.Join(errorList...)
+	Kafka           *kafka.Config
 }
 
 func Create() (*Config, error) {
@@ -43,6 +23,7 @@ func Create() (*Config, error) {
 
 	config := &Config{
 		App: &app.Config{
+			Name:      viper.GetString("APP_NAME"),
 			Version:   viper.GetString("APP_VERSION"),
 			Host:      viper.GetString("APP_HOST"),
 			JwtSecret: viper.GetString("JWT_SECRET"),
@@ -83,9 +64,11 @@ func Create() (*Config, error) {
 			AuthDatabase:     viper.GetInt("REDIS_AUTH_DB"),
 			ResourceDatabase: viper.GetInt("REDIS_RESOURCE_DB"),
 		},
-		Kafka: &Kafka{
-			Host: viper.GetString("KAFKA_HOST"),
-			Port: viper.GetInt("KAFKA_PORT"),
+		Kafka: &kafka.Config{
+			Host:     viper.GetString("KAFKA_HOST"),
+			Port:     viper.GetInt("KAFKA_PORT"),
+			Username: viper.GetString("KAFKA_USERNAME"),
+			Password: viper.GetString("KAFKA_PASSWORD"),
 		},
 	}
 

@@ -35,9 +35,9 @@ func (m *Authenticate) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		cacheKey := cache.UserAuthTokenKeyPrefix + token
-		user, ok := m.userCache.Get(cacheKey)
-		if ok {
+		userCacheKey := m.userCache.Key(token)
+		user, ok := m.userCache.Get(userCacheKey)
+		if ok && user != nil {
 			ctx := context.WithValue(r.Context(), UserKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
@@ -61,9 +61,9 @@ func (m *Authenticate) Authenticate(next http.Handler) http.Handler {
 			Email:    resp.User.Email,
 		}
 
-		err = m.userCache.Set(cacheKey, user)
+		err = m.userCache.Set(userCacheKey, user)
 		if err != nil {
-			log.Printf("error SET redis key %s: %v", cacheKey, err)
+			log.Printf("error SET redis key %s: %v", userCacheKey, err)
 		}
 
 		ctx := context.WithValue(r.Context(), UserKey, user)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -59,7 +60,7 @@ func getPool(dsn string) (*pgxpool.Pool, error) {
 		pool.Close()
 		return nil, fmt.Errorf("cannot connect to PostgreSQL: %w", err)
 	}
-	fmt.Printf("successfully connected to PostgreSQL at %s\n", dsn)
+	log.Printf("successfully connected to PostgreSQL at %s\n", dsn)
 
 	return pool, nil
 }

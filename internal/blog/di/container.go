@@ -2,10 +2,8 @@ package di
 
 import (
 	"fmt"
-	"net/http"
 
 	"github.com/CXTACLYSM/hiring-api/configs/blog"
-	"github.com/CXTACLYSM/hiring-api/configs/blog/database/persistence/postgres"
 	createOnePost "github.com/CXTACLYSM/hiring-api/internal/blog/post/application/commands/createOne"
 	deleteOnePost "github.com/CXTACLYSM/hiring-api/internal/blog/post/application/commands/deleteOne"
 	updateOnePost "github.com/CXTACLYSM/hiring-api/internal/blog/post/application/commands/updateOne"
@@ -20,20 +18,19 @@ import (
 	findOnePostHandler "github.com/CXTACLYSM/hiring-api/internal/blog/post/infrastructure/queries/findOne"
 	pb "github.com/CXTACLYSM/hiring-api/pkg/grpc/auth/v1"
 	pgConnector "github.com/CXTACLYSM/hiring-api/pkg/postgres"
-	"github.com/CXTACLYSM/hiring-api/pkg/redis"
+	redisConnector "github.com/CXTACLYSM/hiring-api/pkg/redis"
 	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/cache"
 	pkgHandlers "github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/handlers"
 	pkgMiddlewares "github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/middlewares"
 	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/validation"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-playground/validator/v10"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Infrastructure struct {
-	PgConnector *pgConnector.Connector
-	Redis       *redis.Connector
+	PgConnector    *pgConnector.Connector
+	RedisConnector *redisConnector.Connector
 }
 
 type Queries struct {
@@ -93,6 +90,9 @@ func (c *Container) Init(cfg *configs.Config) error {
 	if err := c.initValidator(); err != nil {
 		return err
 	}
+	if err := c.initCacheEntities(); err != nil {
+		return err
+	}
 
 	if err := c.initMiddlewares(cfg); err != nil {
 		return err
@@ -108,21 +108,28 @@ func (c *Container) Init(cfg *configs.Config) error {
 }
 
 func (c *Container) initInfrastructure(cfg *configs.Config) error {
-	readDSN, err := cfg.PostgresCluster.DSN(postgres.ReadOperation)
+	readDSN, err := cfg.PostgresCluster.DSN(pgConnector.ReadOperation)
 	if err != nil {
 		return fmt.Errorf("error initializing infra read pgx pool: %w", err)
 	}
-	writeDSN, err := cfg.PostgresCluster.DSN(postgres.WriteOperation)
+	writeDSN, err := cfg.PostgresCluster.DSN(pgConnector.WriteOperation)
 	if err != nil {
 		return fmt.Errorf("error initializing infra write pgx pool: %w", err)
 	}
 	pgConn, err := pgConnector.NewConnector(readDSN, writeDSN)
 	if err != nil {
-		return fmt.Errorf("failed to connect to postgres: %v", err)
+		return fmt.Errorf("failed to connect to postgres: %w", err)
+	}
+
+	authCfg, resourceCfg := cfg.Redis.ConnectorConfigs()
+	redisConn, err := redisConnector.NewConnector(authCfg, resourceCfg)
+	if err != nil {
+		return fmt.Errorf("faied to connect to redis: %w", err)
 	}
 
 	c.Infrastructure = &Infrastructure{
-		PgConnector: pgConn,
+		PgConnector:    pgConn,
+		RedisConnector: redisConn,
 	}
 
 	return nil
@@ -149,14 +156,14 @@ func (c *Container) initCommands() error {
 
 func (c *Container) initCacheEntities() error {
 	c.CacheEntities = &CacheEntities{
-		UserCache: cache.NewUserCache(c.Infrastructure.Redis.AuthPool),
+		UserCache: cache.NewUserCache(c.Infrastructure.RedisConnector.AuthPool),
 	}
 
 	return nil
 }
 
 func (c *Container) initMiddlewares(cfg *configs.Config) error {
-	conn, err := grpc.NewClient(cfg.authGrpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(cfg.Auth.GrpcSocketStr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to auth grpc: %w", err)
 	}
