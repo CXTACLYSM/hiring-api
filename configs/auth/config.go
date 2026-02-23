@@ -23,10 +23,11 @@ func Create() (*Config, error) {
 
 	config := &Config{
 		App: &app.Config{
-			Name:      viper.GetString("APP_NAME"),
-			Version:   viper.GetString("APP_VERSION"),
-			Host:      viper.GetString("APP_HOST"),
-			JwtSecret: viper.GetString("JWT_SECRET"),
+			Environment: viper.GetString("APP_ENVIRONMENT"),
+			Name:        viper.GetString("APP_NAME"),
+			Version:     viper.GetString("APP_VERSION"),
+			Host:        viper.GetString("APP_HOST"),
+			JwtSecret:   viper.GetString("JWT_SECRET"),
 
 			Http: app.Http{
 				Port:              viper.GetInt("APP_HTTP_PORT"),

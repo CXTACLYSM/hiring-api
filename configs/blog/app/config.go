@@ -6,11 +6,17 @@ import (
 	"time"
 )
 
+const (
+	Development = "development"
+	Production  = "production"
+)
+
 type Config struct {
-	Name    string
-	Version string
-	Host    string
-	Http    Http
+	Environment string
+	Name        string
+	Version     string
+	Host        string
+	Http        Http
 }
 
 type Http struct {
@@ -25,6 +31,9 @@ type Http struct {
 func (c *Config) Validate() error {
 	var errorList []error
 
+	if c.Environment != Development && c.Environment != Production {
+		errorList = append(errorList, errors.New("environment must be one of: development, production"))
+	}
 	if c.Name == "" {
 		errorList = append(errorList, fmt.Errorf("application name can't be empty"))
 	}

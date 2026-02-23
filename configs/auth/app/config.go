@@ -6,11 +6,17 @@ import (
 	"time"
 )
 
+const (
+	Development = "development"
+	Production  = "production"
+)
+
 type Config struct {
-	Name      string
-	Version   string
-	Host      string
-	JwtSecret string
+	Environment string
+	Name        string
+	Version     string
+	Host        string
+	JwtSecret   string
 
 	Http Http
 	Grpc Grpc
@@ -33,23 +39,26 @@ type Grpc struct {
 func (c *Config) Validate() error {
 	var errorList []error
 
+	if c.Environment != Development && c.Environment != Production {
+		errorList = append(errorList, errors.New("environment must be one of: development, production"))
+	}
 	if c.Name == "" {
-		errorList = append(errorList, fmt.Errorf("application name can't be empty"))
+		errorList = append(errorList, errors.New("application name can't be empty"))
 	}
 	if c.Version == "" {
-		errorList = append(errorList, fmt.Errorf("version can't be empty"))
+		errorList = append(errorList, errors.New("version can't be empty"))
 	}
 	if c.Host == "" {
-		errorList = append(errorList, fmt.Errorf("host can't be empty"))
+		errorList = append(errorList, errors.New("host can't be empty"))
 	}
 	if c.Http.Port == 0 {
-		errorList = append(errorList, fmt.Errorf("http port can't be zero value"))
+		errorList = append(errorList, errors.New("http port can't be zero value"))
 	}
 	if c.Grpc.Port == 0 {
-		errorList = append(errorList, fmt.Errorf("gRPC port can't be zero value"))
+		errorList = append(errorList, errors.New("gRPC port can't be zero value"))
 	}
 	if c.JwtSecret == "" {
-		errorList = append(errorList, fmt.Errorf("jwt secret can't be empty"))
+		errorList = append(errorList, errors.New("jwt secret can't be empty"))
 	}
 
 	return errors.Join(errorList...)

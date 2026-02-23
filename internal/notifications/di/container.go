@@ -6,16 +6,19 @@ import (
 	"os"
 
 	"github.com/CXTACLYSM/hiring-api/configs/notifications"
+	"github.com/CXTACLYSM/hiring-api/configs/notifications/app"
 	"github.com/CXTACLYSM/hiring-api/internal/notifications/consumer"
 	pgConnector "github.com/CXTACLYSM/hiring-api/pkg/postgres"
 	redisConnector "github.com/CXTACLYSM/hiring-api/pkg/redis"
 	"github.com/IBM/sarama"
+	"go.uber.org/zap"
 )
 
 type Infrastructure struct {
 	PgConnector    *pgConnector.Connector
 	RedisConnector *redisConnector.Connector
 	Kafka          *Kafka
+	Logger         *zap.Logger
 }
 
 type Kafka struct {
@@ -44,6 +47,11 @@ func (c *Container) Init(cfg *configs.Config) error {
 }
 
 func (c *Container) initInfrastructure(cfg *configs.Config) error {
+	logger, err := createLogger(cfg.App.Environment)
+	if err != nil {
+		return fmt.Errorf("error creating zap logger: %w", err)
+	}
+
 	readDSN, err := cfg.PostgresCluster.DSN(pgConnector.ReadOperation)
 	if err != nil {
 		return fmt.Errorf("error initializing infra read pgx pool: %w", err)
@@ -84,6 +92,7 @@ func (c *Container) initInfrastructure(cfg *configs.Config) error {
 			ConsumerGroup: group,
 			Topics:        cfg.Kafka.Topics(),
 		},
+		Logger: logger,
 	}
 
 	return nil
@@ -95,4 +104,11 @@ func (c *Container) initHandlers() error {
 	}
 
 	return nil
+}
+
+func createLogger(env string) (*zap.Logger, error) {
+	if env == app.Production {
+		return zap.NewProduction()
+	}
+	return zap.NewDevelopment()
 }

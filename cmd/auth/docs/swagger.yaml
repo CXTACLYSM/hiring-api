@@ -1,0 +1,413 @@
+basePath: /api/v1
+definitions:
+  dto.CreateOneDTO:
+    properties:
+      content:
+        maxLength: 300
+        minLength: 9
+        type: string
+      name:
+        maxLength: 100
+        minLength: 3
+        type: string
+    required:
+    - content
+    - name
+    type: object
+  dto.LoginDTO:
+    properties:
+      login:
+        type: string
+      password:
+        minLength: 6
+        type: string
+    required:
+    - login
+    - password
+    type: object
+  dto.RegisterDTO:
+    properties:
+      email:
+        type: string
+      password:
+        minLength: 6
+        type: string
+      password_confirmation:
+        type: string
+      username:
+        maxLength: 50
+        minLength: 3
+        type: string
+    required:
+    - email
+    - password
+    - password_confirmation
+    - username
+    type: object
+  dto.UpdateOneDTO:
+    properties:
+      content:
+        maxLength: 300
+        minLength: 9
+        type: string
+      name:
+        maxLength: 100
+        minLength: 3
+        type: string
+    required:
+    - content
+    - name
+    type: object
+  responses.CreateOneResponse:
+    properties:
+      content:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  responses.ErrorResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  responses.FindOneResponse:
+    properties:
+      content:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  responses.InfoResponse:
+    properties:
+      version:
+        type: string
+    type: object
+  responses.LoginResponse:
+    properties:
+      token:
+        type: string
+    type: object
+  responses.MeResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      username:
+        type: string
+    type: object
+  responses.RegisterResponse:
+    properties:
+      token:
+        type: string
+    type: object
+  responses.UpdateOneResponse:
+    properties:
+      content:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  responses.ValidationError:
+    properties:
+      field:
+        type: string
+      message:
+        type: string
+    type: object
+  responses.ValidationErrorsResponse:
+    properties:
+      errors:
+        items:
+          $ref: '#/definitions/responses.ValidationError'
+        type: array
+      message:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Authentication and user management service.
+  title: Auth API
+  version: "1.0"
+paths:
+  /info:
+    get:
+      description: Returns current service version
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/responses.InfoResponse'
+      summary: Service info
+      tags:
+      - system
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates user by username/email and password, returns JWT
+        token
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LoginDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/responses.LoginResponse'
+        "422":
+          description: Incorrect login or password
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      summary: Login
+      tags:
+      - auth
+  /me:
+    get:
+      description: Returns authenticated user profile
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/responses.MeResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user
+      tags:
+      - user
+  /posts:
+    get:
+      description: Returns filtered list of posts for the authenticated user
+      parameters:
+      - description: Filter by name
+        in: query
+        name: name
+        type: string
+      - description: Filter by content
+        in: query
+        name: content
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/responses.FindOneResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List posts
+      tags:
+      - posts
+    post:
+      consumes:
+      - application/json
+      description: Creates a new blog post for the authenticated user
+      parameters:
+      - description: Post data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateOneDTO'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/responses.CreateOneResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "422":
+          description: Validation errors
+          schema:
+            $ref: '#/definitions/responses.ValidationErrorsResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create post
+      tags:
+      - posts
+  /posts/{id}:
+    delete:
+      description: Soft-deletes a post by ID
+      parameters:
+      - description: Post ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete post
+      tags:
+      - posts
+    get:
+      description: Returns a single post by ID
+      parameters:
+      - description: Post ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/responses.FindOneResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "404":
+          description: Post not found
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get post
+      tags:
+      - posts
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing post by ID
+      parameters:
+      - description: Post ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Updated post data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateOneDTO'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/responses.UpdateOneResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "422":
+          description: Validation errors
+          schema:
+            $ref: '#/definitions/responses.ValidationErrorsResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update post
+      tags:
+      - posts
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account and returns JWT token
+      parameters:
+      - description: Registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RegisterDTO'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/responses.RegisterResponse'
+        "422":
+          description: User already exists
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/responses.ErrorResponse'
+      summary: Register new user
+      tags:
+      - auth
+securityDefinitions:
+  BearerAuth:
+    description: Enter "Bearer {token}" (with quotes around the token removed)
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

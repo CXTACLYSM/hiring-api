@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/CXTACLYSM/hiring-api/configs/blog"
+	"github.com/CXTACLYSM/hiring-api/configs/blog/app"
 	createOnePost "github.com/CXTACLYSM/hiring-api/internal/blog/post/application/commands/createOne"
 	deleteOnePost "github.com/CXTACLYSM/hiring-api/internal/blog/post/application/commands/deleteOne"
 	updateOnePost "github.com/CXTACLYSM/hiring-api/internal/blog/post/application/commands/updateOne"
@@ -24,6 +25,7 @@ import (
 	pkgMiddlewares "github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/middlewares"
 	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/validation"
 	"github.com/go-playground/validator/v10"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -31,6 +33,8 @@ import (
 type Infrastructure struct {
 	PgConnector    *pgConnector.Connector
 	RedisConnector *redisConnector.Connector
+	AuthGrpcConn   *grpc.ClientConn
+	Logger         *zap.Logger
 }
 
 type Queries struct {
@@ -94,7 +98,7 @@ func (c *Container) Init(cfg *configs.Config) error {
 		return err
 	}
 
-	if err := c.initMiddlewares(cfg); err != nil {
+	if err := c.initMiddlewares(); err != nil {
 		return err
 	}
 	if err := c.initServices(); err != nil {
@@ -108,6 +112,11 @@ func (c *Container) Init(cfg *configs.Config) error {
 }
 
 func (c *Container) initInfrastructure(cfg *configs.Config) error {
+	logger, err := createLogger(cfg.App.Environment)
+	if err != nil {
+		return fmt.Errorf("error creating zap logger: %w", err)
+	}
+
 	readDSN, err := cfg.PostgresCluster.DSN(pgConnector.ReadOperation)
 	if err != nil {
 		return fmt.Errorf("error initializing infra read pgx pool: %w", err)
@@ -127,9 +136,16 @@ func (c *Container) initInfrastructure(cfg *configs.Config) error {
 		return fmt.Errorf("faied to connect to redis: %w", err)
 	}
 
+	conn, err := grpc.NewClient(cfg.Auth.GrpcSocketStr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("failed to connect to auth grpc: %w", err)
+	}
+
 	c.Infrastructure = &Infrastructure{
 		PgConnector:    pgConn,
 		RedisConnector: redisConn,
+		AuthGrpcConn:   conn,
+		Logger:         logger,
 	}
 
 	return nil
@@ -162,15 +178,9 @@ func (c *Container) initCacheEntities() error {
 	return nil
 }
 
-func (c *Container) initMiddlewares(cfg *configs.Config) error {
-	conn, err := grpc.NewClient(cfg.Auth.GrpcSocketStr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return fmt.Errorf("failed to connect to auth grpc: %w", err)
-	}
-	client := pb.NewAuthServiceClient(conn)
-
+func (c *Container) initMiddlewares() error {
 	c.Middlewares = &Middlewares{
-		Authenticate: pkgMiddlewares.NewAuthenticate(c.CacheEntities.UserCache, client),
+		Authenticate: pkgMiddlewares.NewAuthenticate(c.CacheEntities.UserCache, pb.NewAuthServiceClient(c.Infrastructure.AuthGrpcConn)),
 		Json:         pkgMiddlewares.NewContentType("application/json"),
 	}
 	return nil
@@ -191,6 +201,7 @@ func (c *Container) initServices() error {
 			c.Commands.CreateOnePost,
 			c.Commands.UpdateOnePost,
 			c.Commands.DeleteOnePost,
+			c.Infrastructure.Logger,
 		),
 	}
 
@@ -208,4 +219,11 @@ func (c *Container) initHandlers(cfg *configs.Config) error {
 	}
 
 	return nil
+}
+
+func createLogger(env string) (*zap.Logger, error) {
+	if env == app.Production {
+		return zap.NewProduction()
+	}
+	return zap.NewDevelopment()
 }

@@ -16,8 +16,21 @@ import (
 	"github.com/CXTACLYSM/hiring-api/internal/auth/di"
 	authgrpc "github.com/CXTACLYSM/hiring-api/internal/auth/grpc"
 	pb "github.com/CXTACLYSM/hiring-api/pkg/grpc/auth/v1"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
+
+// @title           Auth API
+// @version         1.0
+// @description     Authentication and user management service.
+
+// @host            localhost:8080
+// @BasePath        /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter "Bearer {token}" (with quotes around the token removed)
 
 func main() {
 	cfg, err := configs.Create()
@@ -27,8 +40,11 @@ func main() {
 
 	container := &di.Container{}
 	if err = container.Init(cfg); err != nil {
-		log.Fatalf("Error initializing container: %s", err.Error())
+		log.Fatalf("Error initializing container: %v", err)
 	}
+
+	logger := container.Infrastructure.Logger
+	defer logger.Sync()
 	defer container.Infrastructure.PgConnector.Close()
 	defer container.Infrastructure.RedisConnector.Close()
 	defer container.Infrastructure.Kafka.Publisher.Close()
@@ -51,19 +67,19 @@ func main() {
 	pb.RegisterAuthServiceServer(grpcServer, authServer)
 
 	go func() {
-		log.Printf("Starting http server on %s", cfg.App.HttpSocketStr())
+		logger.Info("starting http server", zap.String("addr", cfg.App.HttpSocketStr()))
 		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("error starting http server: %v", err)
+			logger.Fatal("http server error", zap.Error(err))
 		}
 	}()
 	go func() {
 		lis, err := net.Listen("tcp", cfg.App.GrpcSocketStr())
 		if err != nil {
-			log.Fatalf("failed to listen grpc: %v", err)
+			logger.Fatal("failed to listen grpc", zap.Error(err))
 		}
-		log.Printf("Starting gRPC server on :50051")
+		logger.Info("starting grpc server", zap.String("addr", cfg.App.GrpcSocketStr()))
 		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatalf("failed to serve grpc: %v", err)
+			logger.Fatal("failed to serve grpc", zap.Error(err))
 		}
 	}()
 
@@ -72,12 +88,12 @@ func main() {
 	<-quit
 	grpcServer.GracefulStop()
 
-	log.Println("Shutting down server...")
+	logger.Info("shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err = srv.Shutdown(ctx); err != nil {
-		log.Fatalf("server forced to shutdown: %v", err)
+		logger.Fatal("server forced to shutdown", zap.Error(err))
 	}
-	log.Println("Server stopped")
+	logger.Info("server stopped")
 }

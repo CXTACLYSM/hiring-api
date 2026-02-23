@@ -20,6 +20,19 @@ func NewCreateOnePostHandler(postService *services.PostService) *CreateOnePostHa
 	}
 }
 
+// ServeHTTP godoc
+// @Summary     Create post
+// @Description Creates a new blog post for the authenticated user
+// @Tags        posts
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Param       request body     dto.CreateOneDTO true "Post data"
+// @Success     201 {object}     responses.CreateOneResponse
+// @Failure     401 {object}     responses.ErrorResponse "Unauthorized"
+// @Failure     422 {object}     responses.ValidationErrorsResponse "Validation errors"
+// @Failure     500 {object}     responses.ErrorResponse "Internal server error"
+// @Router      /posts [post]
 func (h *CreateOnePostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	user := middlewares.UserFromRequest(r)
 	if user == nil {
@@ -27,14 +40,14 @@ func (h *CreateOnePostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var createOneDTO *dto.CreateOneDTO
+	var createOneDTO dto.CreateOneDTO
 	if err := httputils.DecodeJSON(r, &createOneDTO); err != nil {
 		httputils.WriteError(w, err)
 		return
 	}
 	createOneDTO.UserId = user.Id
 
-	post, err := h.postService.CreateOne(createOneDTO)
+	post, err := h.postService.CreateOne(&createOneDTO)
 	if err != nil {
 		httputils.WriteError(w, err)
 		return

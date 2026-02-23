@@ -20,6 +20,16 @@ func NewDeleteOnePostHandler(postService *services.PostService) *DeleteOnePostHa
 	}
 }
 
+// ServeHTTP godoc
+// @Summary     Delete post
+// @Description Soft-deletes a post by ID
+// @Tags        posts
+// @Security    BearerAuth
+// @Param       id   path       string true "Post ID (UUID)"
+// @Success     202 "Accepted"
+// @Failure     401 {object}    responses.ErrorResponse "Unauthorized"
+// @Failure     500 {object}    responses.ErrorResponse "Internal server error"
+// @Router      /posts/{id} [delete]
 func (h *DeleteOnePostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	user := middlewares.UserFromRequest(r)
 	if user == nil {

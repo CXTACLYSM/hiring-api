@@ -23,12 +23,16 @@ func NewFindOnePostHandler(pool *pgxpool.Pool) *Handler {
 }
 
 func (h *Handler) Handle(query findOne.Query) (*entities.Post, error) {
-	sql := fmt.Sprintf("SELECT id, name, content, created_at, updated_at, created_by, updated_by FROM %s WHERE id = $1", enums.TablePosts)
+	sql := fmt.Sprintf(
+		"SELECT id, name, content, created_at, updated_at, created_by, updated_by FROM %s WHERE id = $1 AND created_by=$2 AND deleted_at IS NULL",
+		enums.TablePosts,
+	)
 
 	row := h.pool.QueryRow(
 		context.Background(),
 		sql,
 		query.Id,
+		query.UserId,
 	)
 
 	post := &entities.Post{}

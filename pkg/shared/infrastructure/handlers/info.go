@@ -17,6 +17,13 @@ func NewInfoHandler(version string) *InfoHandler {
 	}
 }
 
+// ServeHTTP godoc
+// @Summary     Service info
+// @Description Returns current service version
+// @Tags        system
+// @Produce     json
+// @Success     200 {object} responses.InfoResponse
+// @Router      /info [get]
 func (h *InfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	httputils.ResponseOk(w, http.StatusOK, responses.NewInfoResponse(h.version))
 }

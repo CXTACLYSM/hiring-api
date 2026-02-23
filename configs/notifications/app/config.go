@@ -5,15 +5,24 @@ import (
 	"fmt"
 )
 
+const (
+	Development = "development"
+	Production  = "production"
+)
+
 type Config struct {
-	Name    string
-	Version string
-	Host    string
+	Environment string
+	Name        string
+	Version     string
+	Host        string
 }
 
 func (c *Config) Validate() error {
 	var errorList []error
 
+	if c.Environment != Development && c.Environment != Production {
+		errorList = append(errorList, fmt.Errorf("environment must be one of: %s, %s", Development, Production))
+	}
 	if c.Name == "" {
 		errorList = append(errorList, fmt.Errorf("application name can't be empty"))
 	}

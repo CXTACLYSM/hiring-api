@@ -20,6 +20,18 @@ func NewFindListPostHandler(postService *services.PostService) *FindListPostHand
 	}
 }
 
+// ServeHTTP godoc
+// @Summary     List posts
+// @Description Returns filtered list of posts for the authenticated user
+// @Tags        posts
+// @Produce     json
+// @Security    BearerAuth
+// @Param       name    query    string false "Filter by name"
+// @Param       content query    string false "Filter by content"
+// @Success     200 {array}		 responses.FindOneResponse
+// @Failure     401 {object}     responses.ErrorResponse "Unauthorized"
+// @Failure     500 {object}     responses.ErrorResponse "Internal server error"
+// @Router      /posts [get]
 func (h *FindListPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	user := middlewares.UserFromRequest(r)
 	if user == nil {

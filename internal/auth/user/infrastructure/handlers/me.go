@@ -20,6 +20,17 @@ func NewMeHandler(userService *services.UserService) *MeHandler {
 	}
 }
 
+// ServeHTTP godoc
+// @Summary     Get current user
+// @Description Returns authenticated user profile
+// @Tags        user
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} responses.MeResponse
+// @Failure     401 {object} responses.ErrorResponse "Unauthorized"
+// @Failure     404 {object} responses.ErrorResponse "User not found"
+// @Failure     500 {object} responses.ErrorResponse "Internal server error"
+// @Router      /me [get]
 func (h *MeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	user := middlewares.UserFromRequest(r)
 	if user == nil {

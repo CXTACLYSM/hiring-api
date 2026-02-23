@@ -2,14 +2,12 @@ package findList
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/CXTACLYSM/hiring-api/internal/blog/post/application/queries/findList"
 	"github.com/CXTACLYSM/hiring-api/internal/blog/post/domain/entities"
 	"github.com/CXTACLYSM/hiring-api/internal/blog/post/infrastructure/enums"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -24,21 +22,21 @@ func NewFindListPostHandler(pool *pgxpool.Pool) *Handler {
 }
 
 func (h *Handler) Handle(query findList.Query) ([]*entities.Post, error) {
-	conditions := make([]string, 0)
-	args := make([]any, 0)
+	var conditions []string
+	var args []any
 	argIdx := 1
 
 	if query.UserId == "" {
 		return nil, fmt.Errorf("user_id cannot be empty")
 	}
 	if query.Name != "" {
-		conditions = append(conditions, fmt.Sprintf("name=$%d", argIdx))
-		args = append(args, query.Name)
+		conditions = append(conditions, fmt.Sprintf("name ILIKE $%d", argIdx))
+		args = append(args, "%"+query.Name+"%")
 		argIdx++
 	}
 	if query.Content != "" {
-		conditions = append(conditions, fmt.Sprintf("content=$%d", argIdx))
-		args = append(args, query.Content)
+		conditions = append(conditions, fmt.Sprintf("content ILIKE $%d", argIdx))
+		args = append(args, "%"+query.Content+"%")
 		argIdx++
 	}
 
@@ -57,9 +55,6 @@ func (h *Handler) Handle(query findList.Query) ([]*entities.Post, error) {
 		args...,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
 		return nil, fmt.Errorf("error executing find post list query: %w", err)
 	}
 	defer rows.Close()

@@ -11,24 +11,28 @@ import (
 	configs "github.com/CXTACLYSM/hiring-api/configs/notifications"
 	"github.com/CXTACLYSM/hiring-api/internal/notifications/di"
 	"github.com/IBM/sarama"
+	"go.uber.org/zap"
 )
 
 func main() {
 	cfg, err := configs.Create()
 	if err != nil {
-		log.Fatalf("Error creating config: %v", err)
+		log.Fatalf("error creating config: %v", err)
 	}
 
 	container := &di.Container{}
 	if err = container.Init(cfg); err != nil {
-		log.Fatalf("Error initializing container: %s", err.Error())
+		log.Fatalf("error initializing container: %v", err)
 	}
-	defer container.Infrastructure.RedisConnector.Close()
+
+	logger := container.Infrastructure.Logger
+	defer logger.Sync()
 	defer container.Infrastructure.PgConnector.Close()
+	defer container.Infrastructure.RedisConnector.Close()
 
 	defer func() {
 		if err := container.Infrastructure.Kafka.ConsumerGroup.Close(); err != nil {
-			log.Printf("error closing consumer group: %v", err)
+			logger.Error("error closing consumer group", zap.Error(err))
 		}
 	}()
 
@@ -37,37 +41,39 @@ func main() {
 
 	go func() {
 		for err := range container.Infrastructure.Kafka.ConsumerGroup.Errors() {
-			log.Printf("consumer group error: %v", err)
+			logger.Error("consumer group error", zap.Error(err))
 		}
 	}()
 
 	go func() {
 		for {
-			log.Println("attempting to join consumer group...")
+			logger.Debug("attempting to join consumer group...")
 			if err := container.Infrastructure.Kafka.ConsumerGroup.Consume(ctx, container.Infrastructure.Kafka.Topics, container.Handlers.UserCreatedHandler); err != nil {
 				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
-					log.Println("consumer group closed")
+					logger.Info("consumer group closed")
 					return
 				}
-				log.Printf("consumer group consume error: %v", err)
+				logger.Error("consumer group consume error", zap.Error(err))
 			}
 
 			if ctx.Err() != nil {
-				log.Println("context cancelled, stopping consumer")
+				logger.Info("context cancelled, stopping consumer")
 				return
 			}
 
-			log.Println("rebalance happened, rejoining consumer group...")
+			logger.Info("rebalance happened, rejoining consumer group...")
 		}
 	}()
 
-	log.Printf("notifications service started, consuming topics: %v", container.Infrastructure.Kafka.Topics)
+	logger.Info("notifications service started",
+		zap.Strings("topics", container.Infrastructure.Kafka.Topics),
+	)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("shutting down notifications service...")
+	logger.Info("shutting down notifications service...")
 	cancel()
-	log.Println("notifications service stopped")
+	logger.Info("notifications service stopped")
 }

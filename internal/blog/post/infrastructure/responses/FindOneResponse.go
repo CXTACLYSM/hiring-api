@@ -3,9 +3,9 @@ package responses
 import "github.com/CXTACLYSM/hiring-api/internal/blog/post/domain/entities"
 
 type FindOneResponse struct {
-	Id      string
-	Name    string
-	Content string
+	Id      string `json:"id"`
+	Name    string `json:"name"`
+	Content string `json:"content"`
 }
 
 func NewFindOneResponse(post *entities.Post) *FindOneResponse {

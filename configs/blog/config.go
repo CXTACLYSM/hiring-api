@@ -2,7 +2,6 @@ package configs
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/CXTACLYSM/hiring-api/configs/blog/app"
@@ -17,27 +16,6 @@ type Config struct {
 	Auth            *services.Auth
 	PostgresCluster *postgres.ClusterConfig
 	Redis           *redis.Config
-	Kafka           *Kafka
-}
-
-type Kafka struct {
-	Host string
-	Port int
-}
-
-func (k *Kafka) Brokers() []string {
-	return []string{fmt.Sprintf("%s:%d", k.Host, k.Port)}
-}
-
-func (k *Kafka) Validate() error {
-	var errorList []error
-	if k.Host == "" {
-		errorList = append(errorList, fmt.Errorf("kafka host is required"))
-	}
-	if k.Port == 0 {
-		errorList = append(errorList, fmt.Errorf("kafka port is required"))
-	}
-	return errors.Join(errorList...)
 }
 
 func Create() (*Config, error) {
@@ -45,9 +23,10 @@ func Create() (*Config, error) {
 
 	config := &Config{
 		App: &app.Config{
-			Name:    viper.GetString("APP_NAME"),
-			Version: viper.GetString("APP_VERSION"),
-			Host:    viper.GetString("APP_HOST"),
+			Environment: viper.GetString("APP_ENVIRONMENT"),
+			Name:        viper.GetString("APP_NAME"),
+			Version:     viper.GetString("APP_VERSION"),
+			Host:        viper.GetString("APP_HOST"),
 			Http: app.Http{
 				Port:              viper.GetInt("APP_HTTP_PORT"),
 				ReadHeaderTimeout: 5 * time.Second,
@@ -85,10 +64,6 @@ func Create() (*Config, error) {
 			AuthDatabase:     viper.GetInt("REDIS_AUTH_DB"),
 			ResourceDatabase: viper.GetInt("REDIS_RESOURCE_DB"),
 		},
-		Kafka: &Kafka{
-			Host: viper.GetString("KAFKA_HOST"),
-			Port: viper.GetInt("KAFKA_PORT"),
-		},
 	}
 
 	if err := config.Validate(); err != nil {
@@ -104,6 +79,5 @@ func (c *Config) Validate() error {
 		c.Auth.Validate(),
 		c.PostgresCluster.Validate(),
 		c.Redis.Validate(),
-		c.Kafka.Validate(),
 	)
 }

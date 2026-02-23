@@ -3,6 +3,8 @@ package httputils
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -28,7 +30,34 @@ func WriteError(w http.ResponseWriter, err error) {
 }
 
 func DecodeJSON(r *http.Request, dest any) error {
-	return json.NewDecoder(r.Body).Decode(dest)
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(dest); err != nil {
+		if errors.Is(err, io.EOF) {
+			return &pkgErrors.ApplicationError{
+				Message: "request body is required",
+			}
+		}
+
+		var syntaxErr *json.SyntaxError
+		if errors.As(err, &syntaxErr) {
+			return &pkgErrors.ApplicationError{
+				Message: "invalid json syntax",
+			}
+		}
+
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &typeErr) {
+			return &pkgErrors.ApplicationError{
+				Message: fmt.Sprintf("invalid type for field %s: expected %s", typeErr.Field, typeErr.Type.String()),
+			}
+		}
+
+		return &pkgErrors.ApplicationError{
+			Message: "invalid request body",
+		}
+	}
+
+	return nil
 }
 
 func ResponseOk(w http.ResponseWriter, status int, data any) {

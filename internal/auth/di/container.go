@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/CXTACLYSM/hiring-api/configs/auth"
+	"github.com/CXTACLYSM/hiring-api/configs/auth/app"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/shared/infrastructure/middlewares"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/tokens"
 	createOneUser "github.com/CXTACLYSM/hiring-api/internal/auth/user/application/commands/createOne"
@@ -21,17 +22,18 @@ import (
 	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/validation"
 	"github.com/IBM/sarama"
 	"github.com/go-playground/validator/v10"
+	"go.uber.org/zap"
 )
 
 type Infrastructure struct {
 	PgConnector    *pgConnector.Connector
 	RedisConnector *redisConnector.Connector
 	Kafka          *Kafka
+	Logger         *zap.Logger
 }
 
 type Kafka struct {
-	SyncProducer sarama.SyncProducer
-	Publisher    *kafka.Publisher
+	Publisher kafka.EventPublisher
 }
 
 type Queries struct {
@@ -104,6 +106,11 @@ func (c *Container) Init(cfg *configs.Config) error {
 }
 
 func (c *Container) initInfrastructure(cfg *configs.Config) error {
+	logger, err := createLogger(cfg.App.Environment)
+	if err != nil {
+		return fmt.Errorf("error creating zap logger: %w", err)
+	}
+
 	readDSN, err := cfg.PostgresCluster.DSN(pgConnector.ReadOperation)
 	if err != nil {
 		return fmt.Errorf("error initializing infra read pgx pool: %w", err)
@@ -114,13 +121,13 @@ func (c *Container) initInfrastructure(cfg *configs.Config) error {
 	}
 	pgConn, err := pgConnector.NewConnector(readDSN, writeDSN)
 	if err != nil {
-		return fmt.Errorf("failed to connect to postgres: %w", err)
+		return fmt.Errorf("error creating pgx connector: %w", err)
 	}
 
 	authCfg, resourceCfg := cfg.Redis.ConnectorConfigs()
 	redisConn, err := redisConnector.NewConnector(authCfg, resourceCfg)
 	if err != nil {
-		return fmt.Errorf("failed to connecto to redis: %w", err)
+		return fmt.Errorf("error creating redis connector: %w", err)
 	}
 
 	config := sarama.NewConfig()
@@ -130,17 +137,17 @@ func (c *Container) initInfrastructure(cfg *configs.Config) error {
 
 	producer, err := sarama.NewSyncProducer(cfg.Kafka.Brokers(), config)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating kafka sync producer: %w", err)
 	}
-	publisher := kafka.NewPublisher(producer)
+	publisher := kafka.NewDefaultEventPublisher(producer)
 
 	c.Infrastructure = &Infrastructure{
 		PgConnector:    pgConn,
 		RedisConnector: redisConn,
 		Kafka: &Kafka{
-			SyncProducer: producer,
-			Publisher:    publisher,
+			Publisher: publisher,
 		},
+		Logger: logger,
 	}
 
 	return nil
@@ -189,8 +196,19 @@ func (c *Container) initServices(cfg *configs.Config) error {
 	tokenGenerator := tokens.NewJwtTokenGenerator(cfg.App.JwtSecret)
 
 	c.Services = &Services{
-		authService: services.NewAuthService(c.Validator, c.Queries.FindOneUser, c.Commands.CreateOneUser, tokenGenerator, c.Infrastructure.Kafka.Publisher),
-		userService: services.NewUserService(c.Queries.FindOneUser, c.Commands.CreateOneUser),
+		authService: services.NewAuthService(
+			c.Validator,
+			c.Queries.FindOneUser,
+			c.Commands.CreateOneUser,
+			tokenGenerator,
+			c.Infrastructure.Kafka.Publisher,
+			c.Infrastructure.Logger,
+		),
+		userService: services.NewUserService(
+			c.Queries.FindOneUser,
+			c.Commands.CreateOneUser,
+			c.Infrastructure.Logger,
+		),
 	}
 
 	return nil
@@ -205,4 +223,11 @@ func (c *Container) initHandlers(cfg *configs.Config) error {
 	}
 
 	return nil
+}
+
+func createLogger(env string) (*zap.Logger, error) {
+	if env == app.Production {
+		return zap.NewProduction()
+	}
+	return zap.NewDevelopment()
 }

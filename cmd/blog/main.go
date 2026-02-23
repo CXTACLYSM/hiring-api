@@ -13,36 +13,53 @@ import (
 	"github.com/CXTACLYSM/hiring-api/configs/blog"
 	"github.com/CXTACLYSM/hiring-api/internal/blog"
 	"github.com/CXTACLYSM/hiring-api/internal/blog/di"
+	"go.uber.org/zap"
 )
+
+// @title           Blog API
+// @version         1.0
+// @description     Blog post management service.
+
+// @host            localhost:8081
+// @BasePath        /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter "Bearer {token}"
 
 func main() {
 	cfg, err := configs.Create()
 	if err != nil {
-		log.Fatalf("Error creating config: %v", err)
+		log.Fatalf("error creating config: %v", err)
 	}
 
 	container := &di.Container{}
 	if err = container.Init(cfg); err != nil {
-		log.Fatalf("Error initializing container: %s", err.Error())
+		log.Fatalf("error initializing container: %v", err)
 	}
+
+	logger := container.Infrastructure.Logger
+	defer logger.Sync()
 	defer container.Infrastructure.PgConnector.Close()
 	defer container.Infrastructure.RedisConnector.Close()
+	defer container.Infrastructure.AuthGrpcConn.Close()
 
 	r := blog.InitRouter(container.Middlewares, container.Handlers)
 	srv := http.Server{
 		Addr:              cfg.App.HttpSocketStr(),
 		Handler:           r,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      35 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		MaxHeaderBytes:    1 << 20, // 1 MB
+		ReadHeaderTimeout: cfg.App.Http.ReadHeaderTimeout,
+		ReadTimeout:       cfg.App.Http.ReadTimeout,
+		WriteTimeout:      cfg.App.Http.WriteTimeout,
+		IdleTimeout:       cfg.App.Http.IdleTimeout,
+		MaxHeaderBytes:    cfg.App.Http.MaxHeaderBytes,
 	}
 
 	go func() {
-		log.Printf("Starting http server on %s", cfg.App.HttpSocketStr())
+		logger.Info("starting http server on %s", zap.String("addr", cfg.App.HttpSocketStr()))
 		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("error starting http server: %v", err)
+			logger.Fatal("error starting http server", zap.Error(err))
 		}
 	}()
 
@@ -50,12 +67,12 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	logger.Info("shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err = srv.Shutdown(ctx); err != nil {
-		log.Fatalf("server forced to shutdown: %v", err)
+		logger.Fatal("server forced to shutdown", zap.Error(err))
 	}
-	log.Println("Server stopped")
+	logger.Info("server stopped")
 }

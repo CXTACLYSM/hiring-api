@@ -58,7 +58,7 @@ func (h *Handler) Handle(command updateOne.Command) (*entities.Post, error) {
 	argIdx++
 
 	sql := fmt.Sprintf(
-		"UPDATE %s SET %s WHERE %s RETURNING id, name, content, created_at, updated_at, created_by, updated_by",
+		"UPDATE %s SET %s WHERE %s AND deleted_at IS NULL RETURNING id, name, content, created_at, updated_at, created_by, updated_by",
 		enums.TablePosts,
 		strings.Join(setClauses, ", "),
 		strings.Join(whereClauses, " AND "),
