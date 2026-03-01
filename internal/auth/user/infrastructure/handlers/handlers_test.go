@@ -1,7 +1,8 @@
-package handlers_test
+package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,10 +10,12 @@ import (
 	"time"
 
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/mocks"
+	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/queries/findOne"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/services"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/domain/entities"
-	"github.com/CXTACLYSM/hiring-api/internal/auth/user/infrastructure/handlers"
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/infrastructure/responses"
+	entities2 "github.com/CXTACLYSM/hiring-api/pkg/shared/domain"
+	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/middlewares"
 	pkgResponses "github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/responses"
 	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/validation"
 	"github.com/go-playground/validator/v10"
@@ -24,13 +27,16 @@ import (
 )
 
 type httpFixtures struct {
-	ctrl            *gomock.Controller
-	findOneUser     *mocks.MockFindOneUserHandler
-	createOneUser   *mocks.MockCreateOneUserHandler
-	tokenGenerator  *mocks.MockTokenGenerator
-	publisher       *mocks.MockEventPublisher
-	registerHandler *handlers.RegisterHandler
-	loginHandler    *handlers.LoginHandler
+	ctrl *gomock.Controller
+
+	findOneUser    *mocks.MockFindOneUserHandler
+	createOneUser  *mocks.MockCreateOneUserHandler
+	tokenGenerator *mocks.MockTokenGenerator
+	publisher      *mocks.MockEventPublisher
+
+	registerHandler *RegisterHandler
+	loginHandler    *LoginHandler
+	meHandler       *MeHandler
 }
 
 func setupHTTPTest(t *testing.T) *httpFixtures {
@@ -43,23 +49,32 @@ func setupHTTPTest(t *testing.T) *httpFixtures {
 
 	v := validation.NewValidator(validator.New())
 
+	logger := zap.NewNop()
 	authService := services.NewAuthService(
 		v,
 		findOneUser,
 		createOneUser,
 		tokenGenerator,
 		publisher,
-		zap.NewNop(),
+		logger,
+	)
+	userService := services.NewUserService(
+		findOneUser,
+		createOneUser,
+		logger,
 	)
 
 	return &httpFixtures{
-		ctrl:            ctrl,
-		findOneUser:     findOneUser,
-		createOneUser:   createOneUser,
-		tokenGenerator:  tokenGenerator,
-		publisher:       publisher,
-		registerHandler: handlers.NewRegisterHandler(authService),
-		loginHandler:    handlers.NewLoginHandler(authService),
+		ctrl: ctrl,
+
+		findOneUser:    findOneUser,
+		createOneUser:  createOneUser,
+		tokenGenerator: tokenGenerator,
+		publisher:      publisher,
+
+		registerHandler: NewRegisterHandler(authService),
+		loginHandler:    NewLoginHandler(authService),
+		meHandler:       NewMeHandler(userService),
 	}
 }
 
@@ -303,4 +318,52 @@ func TestLoginHandler_UserNotFound(t *testing.T) {
 	var resp pkgResponses.ErrorResponse
 	json.NewDecoder(rec.Body).Decode(&resp)
 	assert.Equal(t, "incorrect login or password", resp.Message)
+}
+
+func TestMeHandler_Success(t *testing.T) {
+	f := setupHTTPTest(t)
+
+	user := testUser()
+
+	f.findOneUser.EXPECT().
+		Handle(findOne.Query{
+			Id: user.Id,
+		}).
+		Return(user, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := context.WithValue(req.Context(), middlewares.UserKey, &entities2.User{
+		Id:       user.Id,
+		Username: user.Username,
+		Email:    user.Email,
+	})
+	req = req.WithContext(ctx)
+
+	rec := httptest.NewRecorder()
+
+	f.meHandler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp responses.MeResponse
+	json.NewDecoder(rec.Body).Decode(&resp)
+	assert.Equal(t, user.Id, resp.Id)
+}
+
+func TestMeHandler_UserNotFound(t *testing.T) {
+	f := setupHTTPTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+
+	f.meHandler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	var resp pkgResponses.ErrorResponse
+	json.NewDecoder(rec.Body).Decode(&resp)
+	assert.Equal(t, "unauthorized", resp.Message)
 }

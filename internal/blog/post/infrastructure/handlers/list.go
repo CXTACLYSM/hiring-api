@@ -39,13 +39,13 @@ func (h *FindListPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	listDTO := &dto.ListDTO{
+	findListDTO := &dto.FindListDTO{
 		Name:    r.URL.Query().Get("name"),
 		Content: r.URL.Query().Get("content"),
 		UserId:  user.Id,
 	}
 
-	postList, err := h.postService.FindList(listDTO)
+	postList, err := h.postService.FindList(findListDTO)
 	if err != nil {
 		httputils.WriteError(w, err)
 		return

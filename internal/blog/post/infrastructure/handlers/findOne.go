@@ -8,6 +8,7 @@ import (
 	"github.com/CXTACLYSM/hiring-api/internal/blog/post/infrastructure/responses"
 	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/httputils"
 	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/middlewares"
+	"github.com/go-chi/chi/v5"
 )
 
 type FindOnePostHandler struct {
@@ -40,7 +41,7 @@ func (h *FindOnePostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	findOneDTO := &dto.FindOneDTO{
-		Id:     r.PathValue("id"),
+		Id:     chi.URLParam(r, "id"),
 		UserId: user.Id,
 	}
 

@@ -12,6 +12,7 @@ import (
 	appErrors "github.com/CXTACLYSM/hiring-api/pkg/shared/application/errors"
 	"github.com/CXTACLYSM/hiring-api/pkg/shared/infrastructure/validation"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -26,6 +27,7 @@ type testFixtures struct {
 	tokenGenerator *mocks.MockTokenGenerator
 	publisher      *mocks.MockEventPublisher
 	authService    *AuthService
+	userService    *UserService
 }
 
 func setupTest(t *testing.T) *testFixtures {
@@ -37,6 +39,7 @@ func setupTest(t *testing.T) *testFixtures {
 	publisher := mocks.NewMockEventPublisher(ctrl)
 
 	v := validation.NewValidator(validator.New())
+	logger := zap.NewNop()
 
 	authService := NewAuthService(
 		v,
@@ -44,7 +47,12 @@ func setupTest(t *testing.T) *testFixtures {
 		createOneUser,
 		tokenGenerator,
 		publisher,
-		zap.NewNop(),
+		logger,
+	)
+	userService := NewUserService(
+		findOneUser,
+		createOneUser,
+		logger,
 	)
 
 	return &testFixtures{
@@ -54,6 +62,7 @@ func setupTest(t *testing.T) *testFixtures {
 		tokenGenerator: tokenGenerator,
 		publisher:      publisher,
 		authService:    authService,
+		userService:    userService,
 	}
 }
 
@@ -367,4 +376,49 @@ func TestLogin_TokenGenerationFails(t *testing.T) {
 	assert.Error(t, err)
 	assert.Empty(t, token)
 	assert.Contains(t, err.Error(), "generating token")
+}
+
+func TestMe_Success(t *testing.T) {
+	f := setupTest(t)
+
+	user := testUser()
+
+	findOneDTO := findOne.Query{
+		Id: user.Id,
+	}
+
+	f.findOneUser.EXPECT().Handle(findOneDTO).Return(user, nil)
+
+	result, err := f.userService.Me(user.Id)
+
+	require.NoError(t, err)
+	assert.Equal(t, user.Id, result.Id)
+}
+
+func TestMe_SuccessNoUser(t *testing.T) {
+	f := setupTest(t)
+
+	id := uuid.NewString()
+	findOneDTO := findOne.Query{
+		Id: id,
+	}
+
+	f.findOneUser.EXPECT().Handle(findOneDTO).Return(nil, nil)
+
+	result, err := f.userService.Me(id)
+
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestMe_Error(t *testing.T) {
+	f := setupTest(t)
+
+	f.findOneUser.EXPECT().Handle(gomock.Any()).Return(nil, assert.AnError)
+
+	result, err := f.userService.Me(uuid.NewString())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "error handling")
+	assert.Nil(t, result)
 }

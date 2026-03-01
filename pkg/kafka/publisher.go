@@ -26,7 +26,7 @@ func NewDefaultEventPublisher(producer sarama.SyncProducer) *DefaultEventPublish
 func (p *DefaultEventPublisher) Push(event events.Event) error {
 	serialized, err := event.Serialize()
 	if err != nil {
-		return fmt.Errorf("error pushing event to kafka: %w", err)
+		return fmt.Errorf("error serializing event to kafka: %w", err)
 	}
 
 	_, _, err = p.producer.SendMessage(&sarama.ProducerMessage{

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/CXTACLYSM/hiring-api/internal/blog/post/application/dto"
@@ -51,13 +50,6 @@ func (h *UpdateOnePostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 	updateOneDTO.UserId = user.Id
 	updateOneDTO.Id = chi.URLParam(r, "id")
-
-	user = middlewares.UserFromRequest(r)
-	if user == nil {
-		httputils.WriteError(w, errors.New("claims is nil"))
-		return
-	}
-	updateOneDTO.UserId = user.Id
 
 	post, err := h.postService.UpdateOne(&updateOneDTO)
 	if err != nil {

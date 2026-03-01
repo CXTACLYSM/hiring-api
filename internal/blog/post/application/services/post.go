@@ -46,7 +46,7 @@ func NewPostService(
 
 func (s *PostService) CreateOne(dto *dto.CreateOneDTO) (*entities.Post, error) {
 	if err := s.validator.Struct(dto); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error validating create one post dto: %w", err)
 	}
 
 	post, err := s.createOnePost.Handle(
@@ -138,7 +138,7 @@ func (s *PostService) FindOne(dto *dto.FindOneDTO) (*entities.Post, error) {
 	return post, nil
 }
 
-func (s *PostService) FindList(dto *dto.ListDTO) ([]*entities.Post, error) {
+func (s *PostService) FindList(dto *dto.FindListDTO) ([]*entities.Post, error) {
 	if err := s.validator.Struct(dto); err != nil {
 		return nil, err
 	}
