@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/commands/createOne"
@@ -41,7 +42,7 @@ func NewAuthService(
 	}
 }
 
-func (s *AuthService) Register(dto *dto.RegisterDTO) (string, error) {
+func (s *AuthService) Register(ctx context.Context, dto *dto.RegisterDTO) (string, error) {
 	if err := s.validator.Struct(dto); err != nil {
 		s.logger.Debug("validation failed",
 			zap.String("username", dto.Username),
@@ -51,7 +52,7 @@ func (s *AuthService) Register(dto *dto.RegisterDTO) (string, error) {
 		return "", fmt.Errorf("error validating register dto: %w", err)
 	}
 
-	user, err := s.findOneUser.Handle(findOne.Query{
+	user, err := s.findOneUser.Handle(ctx, findOne.Query{
 		Username: dto.Username,
 		Email:    dto.Email,
 	})
@@ -123,7 +124,7 @@ func (s *AuthService) Register(dto *dto.RegisterDTO) (string, error) {
 	return token, nil
 }
 
-func (s *AuthService) Login(dto *dto.LoginDTO) (string, error) {
+func (s *AuthService) Login(ctx context.Context, dto *dto.LoginDTO) (string, error) {
 	if err := s.validator.Struct(dto); err != nil {
 		s.logger.Debug("login validation failed",
 			zap.String("login", dto.Login),
@@ -132,7 +133,7 @@ func (s *AuthService) Login(dto *dto.LoginDTO) (string, error) {
 		return "", fmt.Errorf("error validation login dto: %w", err)
 	}
 
-	user, err := s.findOneUser.Handle(findOne.Query{
+	user, err := s.findOneUser.Handle(ctx, findOne.Query{
 		Username: dto.Login,
 		Email:    dto.Login,
 	})

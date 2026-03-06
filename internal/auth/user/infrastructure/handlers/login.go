@@ -37,7 +37,7 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.authService.Login(&loginDTO)
+	token, err := h.authService.Login(r.Context(), &loginDTO)
 	if err != nil {
 		httputils.WriteError(w, err)
 		return

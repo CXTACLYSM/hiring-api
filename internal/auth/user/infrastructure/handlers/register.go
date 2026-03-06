@@ -38,7 +38,7 @@ func (h *RegisterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.authService.Register(&registerDTO)
+	token, err := h.authService.Register(r.Context(), &registerDTO)
 	if err != nil {
 		httputils.WriteError(w, err)
 		return

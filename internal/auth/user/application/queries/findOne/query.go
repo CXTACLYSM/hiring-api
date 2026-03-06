@@ -1,6 +1,10 @@
 package findOne
 
-import "github.com/CXTACLYSM/hiring-api/internal/auth/user/domain/entities"
+import (
+	"context"
+
+	"github.com/CXTACLYSM/hiring-api/internal/auth/user/domain/entities"
+)
 
 type Query struct {
 	Id       string
@@ -9,5 +13,5 @@ type Query struct {
 }
 
 type Handler interface {
-	Handle(Query) (*entities.User, error)
+	Handle(context.Context, Query) (*entities.User, error)
 }

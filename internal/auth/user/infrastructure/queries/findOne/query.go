@@ -22,7 +22,7 @@ func NewFindOneUserQueryHandler(pool *pgxpool.Pool) *Handler {
 	}
 }
 
-func (h *Handler) Handle(query findOne.Query) (*entities.User, error) {
+func (h *Handler) Handle(ctx context.Context, query findOne.Query) (*entities.User, error) {
 	var conditions []string
 	var args []any
 	argIdx := 1
@@ -49,7 +49,7 @@ func (h *Handler) Handle(query findOne.Query) (*entities.User, error) {
 
 	sql := "SELECT id, username, email, password_hash FROM users WHERE " + strings.Join(conditions, " OR ")
 
-	row := h.pool.QueryRow(context.Background(), sql, args...)
+	row := h.pool.QueryRow(ctx, sql, args...)
 
 	user := &entities.User{}
 	err := row.Scan(&user.Id, &user.Username, &user.Email, &user.PasswordHash)

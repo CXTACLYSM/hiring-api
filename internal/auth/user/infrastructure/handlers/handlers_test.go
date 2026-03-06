@@ -102,7 +102,6 @@ func TestRegisterHandler_Success(t *testing.T) {
 
 	user := testUser()
 
-	f.findOneUser.EXPECT().Handle(gomock.Any()).Return(nil, nil)
 	f.createOneUser.EXPECT().Handle(gomock.Any()).Return(user, nil)
 	f.tokenGenerator.EXPECT().Generate(user).Return("jwt-token-123", nil)
 	f.publisher.EXPECT().Push(gomock.Any()).Return(nil)
@@ -117,6 +116,8 @@ func TestRegisterHandler_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/register", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
+
+	f.findOneUser.EXPECT().Handle(req.Context(), gomock.Any()).Return(nil, nil)
 
 	f.registerHandler.ServeHTTP(rec, req)
 
@@ -183,8 +184,6 @@ func TestRegisterHandler_UserAlreadyExists(t *testing.T) {
 
 	existingUser := testUser()
 
-	f.findOneUser.EXPECT().Handle(gomock.Any()).Return(existingUser, nil)
-
 	body := jsonBody(t, map[string]string{
 		"username":              "testuser",
 		"email":                 "test@example.com",
@@ -195,6 +194,8 @@ func TestRegisterHandler_UserAlreadyExists(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/register", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
+
+	f.findOneUser.EXPECT().Handle(req.Context(), gomock.Any()).Return(existingUser, nil)
 
 	f.registerHandler.ServeHTTP(rec, req)
 
@@ -208,8 +209,6 @@ func TestRegisterHandler_UserAlreadyExists(t *testing.T) {
 func TestRegisterHandler_InternalError(t *testing.T) {
 	f := setupHTTPTest(t)
 
-	f.findOneUser.EXPECT().Handle(gomock.Any()).Return(nil, assert.AnError)
-
 	body := jsonBody(t, map[string]string{
 		"username":              "testuser",
 		"email":                 "test@example.com",
@@ -220,6 +219,8 @@ func TestRegisterHandler_InternalError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/register", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
+
+	f.findOneUser.EXPECT().Handle(req.Context(), gomock.Any()).Return(nil, assert.AnError)
 
 	f.registerHandler.ServeHTTP(rec, req)
 
@@ -235,7 +236,6 @@ func TestLoginHandler_Success(t *testing.T) {
 
 	user := testUser()
 
-	f.findOneUser.EXPECT().Handle(gomock.Any()).Return(user, nil)
 	f.tokenGenerator.EXPECT().Generate(user).Return("jwt-token-456", nil)
 
 	body := jsonBody(t, map[string]string{
@@ -246,6 +246,8 @@ func TestLoginHandler_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
+
+	f.findOneUser.EXPECT().Handle(req.Context(), gomock.Any()).Return(user, nil)
 
 	f.loginHandler.ServeHTTP(rec, req)
 
@@ -276,9 +278,6 @@ func TestLoginHandler_WrongPassword(t *testing.T) {
 	f := setupHTTPTest(t)
 
 	user := testUser()
-
-	f.findOneUser.EXPECT().Handle(gomock.Any()).Return(user, nil)
-
 	body := jsonBody(t, map[string]string{
 		"login":    "testuser",
 		"password": "wrongpassword",
@@ -287,6 +286,8 @@ func TestLoginHandler_WrongPassword(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
+
+	f.findOneUser.EXPECT().Handle(req.Context(), gomock.Any()).Return(user, nil)
 
 	f.loginHandler.ServeHTTP(rec, req)
 
@@ -300,16 +301,15 @@ func TestLoginHandler_WrongPassword(t *testing.T) {
 func TestLoginHandler_UserNotFound(t *testing.T) {
 	f := setupHTTPTest(t)
 
-	f.findOneUser.EXPECT().Handle(gomock.Any()).Return(nil, nil)
-
 	body := jsonBody(t, map[string]string{
 		"login":    "nonexistent",
 		"password": "password123",
 	})
-
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
+
+	f.findOneUser.EXPECT().Handle(req.Context(), gomock.Any()).Return(nil, nil)
 
 	f.loginHandler.ServeHTTP(rec, req)
 
@@ -324,13 +324,6 @@ func TestMeHandler_Success(t *testing.T) {
 	f := setupHTTPTest(t)
 
 	user := testUser()
-
-	f.findOneUser.EXPECT().
-		Handle(findOne.Query{
-			Id: user.Id,
-		}).
-		Return(user, nil)
-
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
 	req.Header.Set("Content-Type", "application/json")
 
@@ -340,8 +333,13 @@ func TestMeHandler_Success(t *testing.T) {
 		Email:    user.Email,
 	})
 	req = req.WithContext(ctx)
-
 	rec := httptest.NewRecorder()
+
+	f.findOneUser.EXPECT().
+		Handle(req.Context(), findOne.Query{
+			Id: user.Id,
+		}).
+		Return(user, nil)
 
 	f.meHandler.ServeHTTP(rec, req)
 

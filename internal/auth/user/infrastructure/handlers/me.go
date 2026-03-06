@@ -37,7 +37,7 @@ func (h *MeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	freshUser, err := h.userService.Me(user.Id)
+	freshUser, err := h.userService.Me(r.Context(), user.Id)
 	if err != nil {
 		httputils.WriteError(w, err)
 		return

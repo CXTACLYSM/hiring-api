@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/CXTACLYSM/hiring-api/internal/auth/user/application/commands/createOne"
@@ -23,12 +24,10 @@ func NewUserService(findOne findOne.Handler, createOne createOne.Handler, logger
 	}
 }
 
-func (s *UserService) Me(userId string) (*entities.User, error) {
-	user, err := s.findOneUser.Handle(
-		findOne.Query{
-			Id: userId,
-		},
-	)
+func (s *UserService) Me(ctx context.Context, userId string) (*entities.User, error) {
+	user, err := s.findOneUser.Handle(ctx, findOne.Query{
+		Id: userId,
+	})
 	if err != nil {
 		s.logger.Error("error finding one user by id",
 			zap.String("user_id", userId),

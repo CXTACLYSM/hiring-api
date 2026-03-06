@@ -10,6 +10,7 @@
 package mocks
 
 import (
+	context "context"
 	reflect "reflect"
 
 	findOne "github.com/CXTACLYSM/hiring-api/internal/auth/user/application/queries/findOne"
@@ -42,16 +43,16 @@ func (m *MockFindOneUserHandler) EXPECT() *MockFindOneUserHandlerMockRecorder {
 }
 
 // Handle mocks base method.
-func (m *MockFindOneUserHandler) Handle(arg0 findOne.Query) (*entities.User, error) {
+func (m *MockFindOneUserHandler) Handle(arg0 context.Context, arg1 findOne.Query) (*entities.User, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Handle", arg0)
+	ret := m.ctrl.Call(m, "Handle", arg0, arg1)
 	ret0, _ := ret[0].(*entities.User)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Handle indicates an expected call of Handle.
-func (mr *MockFindOneUserHandlerMockRecorder) Handle(arg0 any) *gomock.Call {
+func (mr *MockFindOneUserHandlerMockRecorder) Handle(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockFindOneUserHandler)(nil).Handle), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockFindOneUserHandler)(nil).Handle), arg0, arg1)
 }
